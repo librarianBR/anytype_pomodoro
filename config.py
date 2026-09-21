@@ -13,8 +13,10 @@ import os
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-EXAMPLE_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.example.json")
+from paths import app_data_dir, resource_path
+
+CONFIG_PATH = os.path.join(app_data_dir(), "config.json")
+EXAMPLE_CONFIG_PATH = resource_path("config.example.json")
 
 
 @dataclass

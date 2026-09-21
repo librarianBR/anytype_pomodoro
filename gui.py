@@ -207,6 +207,10 @@ def main(page: ft.Page) -> None:
         schedule_on_ui(apply)
 
     def ask_mark_done():
+        pause_btn.disabled = True
+        resume_btn.disabled = True
+        page.update()
+
         note_field = ft.TextField(
             label="Observação (opcional)", multiline=True, min_lines=2, max_lines=4
         )
@@ -228,6 +232,11 @@ def main(page: ft.Page) -> None:
                 except AnytypeError as ex:
                     snack(str(ex), error=True)
                 close_dialog(dlg)
+                if state["timer"]:
+                    state["timer"].resume()
+                pause_btn.disabled = False
+                resume_btn.disabled = False
+                page.update()
 
             return handler
 
@@ -254,6 +263,14 @@ def main(page: ft.Page) -> None:
     def on_phase_end(phase: Phase, cycle: int):
         notify(f"{PHASE_LABELS[phase]} terminou", f"Fim do ciclo {cycle}")
         if phase == Phase.WORK and state["linked_task_id"]:
+            # Pausa AQUI, de forma síncrona, ainda na thread do timer —
+            # antes mesmo do diálogo aparecer. É essencial que isso
+            # aconteça antes de _run_phase retornar, senão a fase seguinte
+            # já teria começado a contar em segundo plano por uma pequena
+            # janela de tempo (o timer não tem como "esperar" um diálogo
+            # assíncrono da interface sozinho).
+            if state["timer"]:
+                state["timer"].pause()
             schedule_on_ui(ask_mark_done)
 
     def on_tick(status):

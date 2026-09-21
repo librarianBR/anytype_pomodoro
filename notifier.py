@@ -9,12 +9,14 @@ import platform
 import shutil
 import subprocess
 
+from paths import resource_path
+
 try:
     from plyer import notification as _plyer_notification
 except Exception:  # biblioteca opcional
     _plyer_notification = None
 
-_SOUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+_SOUNDS_DIR = resource_path("assets")
 
 # Chaves iguais ao .value de pomodoro_timer.Phase (work/short_break/long_break)
 _PHASE_SOUND_FILES = {

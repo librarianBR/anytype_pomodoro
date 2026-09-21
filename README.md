@@ -4,8 +4,6 @@ Aplicação de linha de comando em Python que implementa a técnica Pomodoro
 com tempos configuráveis e integra a lista de tarefas com o **Anytype**
 (usando a API local dele como "banco de dados").
 
-**Está aplicação foi gerada por meio de Vibe Coding usando o Claude Pro**
-
 ## O que a aplicação faz
 
 - **Timer Pomodoro configurável**: tempo de foco, pausa curta, pausa longa e
@@ -157,7 +155,9 @@ acrescentada embaixo das anteriores, com data e hora. Isso acontece de
 várias formas:
 - **Automaticamente**: ao terminar um ciclo de foco vinculado a uma tarefa,
   a aplicação registra "Sessão de foco concluída (X min)" e oferece um
-  campo opcional para você escrever algo a mais antes de confirmar;
+  campo opcional para você escrever algo a mais antes de confirmar (o
+  timer fica pausado automaticamente enquanto essa pergunta está na tela,
+  então a próxima fase não perde tempo esperando sua resposta);
 - **Automaticamente**: ao vincular, trocar ou desvincular uma tarefa da
   sessão (veja a seção acima);
 - **A qualquer momento**: pelo ícone de observações (📝) em cada tarefa na
@@ -229,7 +229,46 @@ sua instalação do Anytype está devolvendo, e ajustar `_to_task` de acordo.
 - `task_manager.py` — regras de negócio de "tarefa com status" em cima do
   cliente do Anytype.
 - `config.py` — modelo de configuração e leitura/escrita do `config.json`.
+- `paths.py` — resolve onde ficam o `config.json` e os arquivos de som,
+  funcionando tanto rodando com `python` normal quanto empacotado num
+  `.exe` pelo PyInstaller (veja "Gerando um .exe" abaixo).
 - `notifier.py` — notificação em terminal + notificação nativa opcional.
 - `main.py` — menu interativo (CLI) que une tudo.
 - `gui.py` — interface gráfica (Flet) que une tudo, incluindo sons e modo mini.
 - `generate_sounds.py` — sintetiza os sons de início de fase (`assets/*.wav`).
+- `pomodoro.spec` — receita pronta do PyInstaller pra gerar um `.exe`.
+
+## Gerando um .exe (Windows) com PyInstaller
+
+Rodar `pyinstaller gui.py` direto tem dois problemas: o executável não
+inclui a pasta `assets/` (os sons) e, em modo `--onefile`, o Python enxerga
+o próprio código rodando dentro de uma pasta temporária diferente a cada
+execução — o que fazia o `config.json` "sumir" toda vez que o programa
+fechava (por isso pedia pra parear com o Anytype de novo a cada sessão).
+Isso já está corrigido no código (`paths.py` trata os dois casos
+corretamente), mas o PyInstaller ainda precisa ser instruído a incluir a
+pasta `assets/` explicitamente — ele não faz isso sozinho.
+
+A forma mais simples é usar a receita pronta:
+```bash
+pip install pyinstaller
+pyinstaller pomodoro.spec
+```
+O executável final fica em `dist/PomodoroAnytype.exe`. O `config.json` é
+criado ao lado dele na primeira execução e passa a persistir normalmente
+entre uma execução e outra.
+
+Se preferir sem o arquivo `.spec`, o comando equivalente no Windows é:
+```bash
+pyinstaller --onefile --windowed --add-data "assets;assets" --name PomodoroAnytype gui.py
+```
+(no Linux/Mac, troque o `;` por `:` em `--add-data`).
+
+**Aviso:** não tenho como gerar nem testar um `.exe` de verdade a partir
+daqui (esse ambiente é Linux, sem Windows disponível) — o `pomodoro.spec`
+foi escrito com base na documentação e nas convenções padrão do
+PyInstaller, mas não pôde ser validado rodando de fato num executável.
+Se ao rodar o `.exe` aparecer algum erro de módulo faltando (comum com
+bibliotecas como o Flet, que carregam alguns submódulos dinamicamente),
+tente adicionar `--collect-all flet` ao comando acima, e me avise o erro
+exato para eu ajustar.

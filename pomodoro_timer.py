@@ -149,6 +149,9 @@ class PomodoroTimer:
             completed = self._run_phase(Phase.WORK, self.config.work_minutes * 60)
             if not completed:
                 break
+            self._wait_while_paused()
+            if self._stop_event.is_set():
+                break
 
             with self._lock:
                 is_long = self._cycle % self.config.cycles_before_long_break == 0
@@ -159,6 +162,9 @@ class PomodoroTimer:
             completed = self._run_phase(break_phase, break_minutes * 60)
             if not completed:
                 break
+            self._wait_while_paused()
+            if self._stop_event.is_set():
+                break
 
             with self._lock:
                 self._cycle += 1
@@ -166,6 +172,16 @@ class PomodoroTimer:
         with self._lock:
             self._running = False
             self._phase = Phase.IDLE
+
+    def _wait_while_paused(self) -> None:
+        """Bloqueia entre uma fase e a próxima enquanto o timer estiver
+        pausado. Existe para o caso de a interface pausar o timer no exato
+        momento em que uma fase termina (ex.: enquanto espera o usuário
+        responder a uma caixa de diálogo) — sem isso, a fase seguinte
+        começaria a contar em segundo plano antes de a pergunta ser
+        respondida, "roubando" tempo dela."""
+        while self._pause_event.is_set() and not self._stop_event.is_set():
+            time.sleep(0.2)
 
     def _run_phase(self, phase: Phase, duration_seconds: float) -> bool:
         """Executa uma fase até o fim, pausa ou parada. Retorna False se foi
