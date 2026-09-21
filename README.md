@@ -4,6 +4,8 @@ Aplicação de linha de comando em Python que implementa a técnica Pomodoro
 com tempos configuráveis e integra a lista de tarefas com o **Anytype**
 (usando a API local dele como "banco de dados").
 
+**Está aplicação foi gerada por meio de Vibe Coding usando o Claude Pro**
+
 ## O que a aplicação faz
 
 - **Timer Pomodoro configurável**: tempo de foco, pausa curta, pausa longa e
