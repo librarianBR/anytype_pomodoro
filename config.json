@@ -1,0 +1,38 @@
+{
+  "pomodoro": {
+    "work_minutes": 25,
+    "short_break_minutes": 5,
+    "long_break_minutes": 15,
+    "cycles_before_long_break": 4,
+    "sound_enabled": true
+  },
+  "anytype": {
+    "base_url": "http://localhost:31009",
+    "api_version": "2025-11-08",
+    "api_key": "",
+    "space_id": "",
+    "task_type_name": "Task",
+    "task_type_key": "",
+    "status_property_name": "Status",
+    "status_property_id": "",
+    "status_property_key": "",
+    "status_options": [
+      "To Do",
+      "In Progress",
+      "Done"
+    ],
+    "in_progress_status_name": "In Progress",
+    "done_status_name": "Done",
+    "status_tag_ids": {},
+    "done_checkbox_property_name": "Done",
+    "done_checkbox_property_id": "",
+    "done_checkbox_property_key": "done",
+    "notes_property_name": "Notes",
+    "notes_property_id": "",
+    "notes_property_key": ""
+  },
+  "gui": {
+    "mini_width": null,
+    "mini_height": null
+  }
+}
