@@ -8,7 +8,7 @@ versão instalada no seu computador, confira o endpoint correspondente na
 documentação (o cabeçalho Anytype-Version define a versão usada) e ajuste.
 Este cliente usa a versão "2025-11-08".
 
-Fluxo de autenticação (uma única vez, feito por pair()):
+Fluxo de autenticação (uma única vez, pelo pareamento na interface):
   1. POST /v1/auth/challenges {"app_name": "..."} -> {"challenge_id": ...}
      O Anytype Desktop mostra um código de 4 dígitos na tela.
   2. Você digita esse código quando o script pedir.
@@ -35,6 +35,19 @@ TAG_COLORS = [
 ]
 
 
+def _unwrap_list(data: Any) -> List[Dict[str, Any]]:
+    """Listagens vêm como {"data": [...], "pagination": {...}}."""
+    if isinstance(data, dict) and "data" in data:
+        return data["data"] or []
+    return data or []
+
+
+def _find_by_name(items: List[Dict[str, Any]], name: str) -> Optional[Dict[str, Any]]:
+    """Primeiro item cujo "name" é igual a `name`, sem diferenciar maiúsculas."""
+    wanted = name.strip().lower()
+    return next((i for i in items if i.get("name", "").strip().lower() == wanted), None)
+
+
 def _unwrap_object(data: Any) -> Any:
     """As respostas de criar/consultar/editar um objeto vêm como
     {"object": {...}} nesta versão da API (outras versões usavam "data").
@@ -49,10 +62,14 @@ def _unwrap_object(data: Any) -> Any:
 
 class AnytypeClient:
     def __init__(self, base_url: str, api_version: str, api_key: str = ""):
+        self.session = requests.Session()
+        self.api_key = api_key
+        self.configure(base_url, api_version)
+
+    def configure(self, base_url: str, api_version: str) -> None:
+        """Atualiza endereço e versão da API (ex.: após salvar nas Configurações)."""
         self.base_url = base_url.rstrip("/")
         self.api_version = api_version
-        self.api_key = api_key
-        self.session = requests.Session()
 
     # --------------------------------------------------------- utilidades
     def _headers(self, auth: bool = True) -> Dict[str, str]:
@@ -63,8 +80,8 @@ class AnytypeClient:
         if auth:
             if not self.api_key:
                 raise AnytypeError(
-                    "Sem api_key configurada. Rode o pareamento (opção "
-                    "'parear com o Anytype' no menu) antes de usar as tarefas."
+                    "A aplicação ainda não está pareada com o Anytype. Faça o "
+                    "pareamento (\"Parear com o Anytype\") antes de usar as tarefas."
                 )
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
@@ -108,59 +125,47 @@ class AnytypeClient:
 
     # ------------------------------------------------------------ espaços
     def list_spaces(self) -> List[Dict[str, Any]]:
-        data = self._request("GET", "/v1/spaces")
-        return data.get("data", data)
+        return _unwrap_list(self._request("GET", "/v1/spaces"))
 
-    # ------------------------------------------------------------- tipos
+    # ----------------------------------------------- tipos e propriedades
     def list_types(self, space_id: str) -> List[Dict[str, Any]]:
-        data = self._request("GET", f"/v1/spaces/{space_id}/types")
-        return data.get("data", data)
+        return _unwrap_list(self._request("GET", f"/v1/spaces/{space_id}/types"))
 
     def find_type_by_name(self, space_id: str, name: str) -> Optional[Dict[str, Any]]:
-        for t in self.list_types(space_id):
-            if t.get("name", "").lower() == name.lower():
-                return t
-        return None
+        return _find_by_name(self.list_types(space_id), name)
 
-    # -------------------------------------------------------- propriedades
     def list_properties(self, space_id: str) -> List[Dict[str, Any]]:
-        data = self._request("GET", f"/v1/spaces/{space_id}/properties")
-        return data.get("data", data)
+        return _unwrap_list(self._request("GET", f"/v1/spaces/{space_id}/properties"))
 
     def find_property_by_name(self, space_id: str, name: str) -> Optional[Dict[str, Any]]:
-        for p in self.list_properties(space_id):
-            if p.get("name", "").lower() == name.lower():
-                return p
-        return None
+        return _find_by_name(self.list_properties(space_id), name)
 
     # --------------------------------------------------------------- tags
     def list_tags(self, space_id: str, property_id: str) -> List[Dict[str, Any]]:
-        data = self._request(
-            "GET", f"/v1/spaces/{space_id}/properties/{property_id}/tags"
+        return _unwrap_list(
+            self._request("GET", f"/v1/spaces/{space_id}/properties/{property_id}/tags")
         )
-        return data.get("data", data)
 
     def create_tag(
         self, space_id: str, property_id: str, name: str, color: str = "grey"
     ) -> Dict[str, Any]:
         if color not in TAG_COLORS:
             color = "grey"
-        return self._request(
+        data = self._request(
             "POST",
             f"/v1/spaces/{space_id}/properties/{property_id}/tags",
             json={"name": name, "color": color},
         )
+        return _unwrap_object(data)
 
     def ensure_tag(
         self, space_id: str, property_id: str, name: str, color: str = "grey"
     ) -> str:
-        """Retorna o id da tag com esse nome, criando-a (com a cor dada) se
-        não existir."""
-        for tag in self.list_tags(space_id, property_id):
-            if tag.get("name", "").lower() == name.lower():
-                return tag["id"]
-        created = self.create_tag(space_id, property_id, name, color=color)
-        return created.get("id") or created.get("data", {}).get("id")
+        """Id da tag com esse nome, criando-a (com a cor dada) se não existir."""
+        existing = _find_by_name(self.list_tags(space_id, property_id), name)
+        if existing:
+            return existing["id"]
+        return self.create_tag(space_id, property_id, name, color=color).get("id")
 
     # ------------------------------------------------------------ objetos
     def create_object(
@@ -168,18 +173,12 @@ class AnytypeClient:
         space_id: str,
         name: str,
         type_key: str,
-        description: str = "",
-        body: str = "",
         properties: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        """Cria um objeto. Atenção: na versão 2025-11-08 da API, o campo
+        "description" de topo é ignorado na criação — a descrição precisa ir
+        em `properties` como {"key": "description", "text": ...}."""
         payload: Dict[str, Any] = {"name": name, "type_key": type_key}
-        if description:
-            # Atenção: na versão 2025-11-08 da API este campo é ignorado na
-            # criação — para gravar a descrição, mande-a como propriedade
-            # {"key": "description", "text": ...} (é o que TaskManager faz).
-            payload["description"] = description
-        if body:
-            payload["body"] = body
         if properties:
             payload["properties"] = properties
         data = self._request("POST", f"/v1/spaces/{space_id}/objects", json=payload)
@@ -191,15 +190,12 @@ class AnytypeClient:
         object_id: str,
         name: Optional[str] = None,
         properties: Optional[List[Dict[str, Any]]] = None,
-        body: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {}
         if name is not None:
             payload["name"] = name
         if properties is not None:
             payload["properties"] = properties
-        if body is not None:
-            payload["body"] = body
         data = self._request(
             "PATCH", f"/v1/spaces/{space_id}/objects/{object_id}", json=payload
         )
@@ -225,11 +221,9 @@ class AnytypeClient:
             if type_key:
                 params["type"] = type_key
             data = self._request("GET", f"/v1/spaces/{space_id}/objects", params=params)
-            if not isinstance(data, dict) or "data" not in data:
-                return data  # formato inesperado: devolve como veio
-            page = data.get("data") or []
+            page = _unwrap_list(data)
             objects.extend(page)
-            pagination = data.get("pagination") or {}
+            pagination = (data.get("pagination") if isinstance(data, dict) else None) or {}
             if not pagination.get("has_more") or not page:
                 return objects
             offset += len(page)

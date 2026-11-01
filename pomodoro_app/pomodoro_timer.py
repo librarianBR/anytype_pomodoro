@@ -19,7 +19,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
-from config import PomodoroConfig
+from .config import PomodoroConfig
+from .formatting import format_mmss
 
 
 class Phase(str, Enum):
@@ -29,8 +30,9 @@ class Phase(str, Enum):
     IDLE = "idle"
 
 
-PHASE_LABELS_PT = {
-    Phase.WORK: "Foco (execução)",
+# Nome de cada fase, usado pelas duas interfaces e nas notificações
+PHASE_LABELS = {
+    Phase.WORK: "Foco",
     Phase.SHORT_BREAK: "Pausa curta",
     Phase.LONG_BREAK: "Pausa longa",
     Phase.IDLE: "Parado",
@@ -51,13 +53,17 @@ class PomodoroStatus:
     def elapsed_seconds(self) -> int:
         return self.total_seconds - self.remaining_seconds
 
+    @property
+    def progress(self) -> float:
+        """Fração da fase já percorrida (0.0 a 1.0)."""
+        return self.elapsed_seconds / self.total_seconds if self.total_seconds else 0.0
+
     def __str__(self) -> str:
-        m, s = divmod(max(self.remaining_seconds, 0), 60)
         estado = "pausado" if self.is_paused else ("rodando" if self.is_running else "parado")
         return (
-            f"[{PHASE_LABELS_PT[self.phase]}] ciclo {self.cycle} "
-            f"(próxima pausa longa após o ciclo {self.cycles_before_long_break}) "
-            f"— {m:02d}:{s:02d} restantes — {estado}"
+            f"[{PHASE_LABELS[self.phase]}] ciclo {self.cycle} "
+            f"(pausa longa a cada {self.cycles_before_long_break} ciclos) "
+            f"— {format_mmss(self.remaining_seconds)} restantes — {estado}"
         )
 
 

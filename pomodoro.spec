@@ -21,7 +21,7 @@ a = Analysis(
     ["gui.py"],
     pathex=[],
     binaries=[],
-    datas=[("assets", "assets")],
+    datas=[("assets", "assets"), ("config.example.json", ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

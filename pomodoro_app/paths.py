@@ -23,12 +23,17 @@ diferente:
   quando o programa fecha.
 
 Rodando como script normal (`python gui.py`), os dois caminhos coincidem:
-a pasta onde os arquivos .py estão.
+a raiz do projeto (a pasta acima deste pacote, onde ficam gui.py, assets/
+e config.json).
 """
 from __future__ import annotations
 
 import os
 import sys
+
+
+# Raiz do projeto: este arquivo fica em <raiz>/pomodoro_app/paths.py
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _is_frozen() -> bool:
@@ -43,14 +48,14 @@ def resource_path(*parts: str) -> str:
     if _is_frozen():
         base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     else:
-        base = os.path.dirname(os.path.abspath(__file__))
+        base = PROJECT_ROOT
     return os.path.join(base, *parts)
 
 
 def app_data_dir() -> str:
     """Pasta persistente e gravável para dados do usuário (config.json).
-    Ao lado do .exe quando empacotado; ao lado dos arquivos .py em modo
-    script normal. Use para LER e GRAVAR configuração/estado do usuário."""
+    Ao lado do .exe quando empacotado; na raiz do projeto em modo script
+    normal. Use para LER e GRAVAR configuração/estado do usuário."""
     if _is_frozen():
         return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    return PROJECT_ROOT

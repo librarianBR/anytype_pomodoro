@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field, fields
 from typing import List, Optional
 
-from paths import app_data_dir, resource_path
+from .paths import app_data_dir, resource_path
 
 CONFIG_PATH = os.path.join(app_data_dir(), "config.json")
 EXAMPLE_CONFIG_PATH = resource_path("config.example.json")
@@ -86,6 +86,29 @@ class AnytypeConfig:
     due_date_property_key: str = "due_date"
     description_property_key: str = "description"
 
+    def reset_space_cache(self) -> None:
+        """Esquece tudo o que foi descoberto no espaço atual (ids de tipo,
+        propriedades e tags). Chamado ao trocar de espaço: esses ids são
+        específicos de cada espaço e seriam inválidos no novo."""
+        self.task_type_key = ""
+        self.status_property_id = ""
+        self.status_property_key = ""
+        self.status_tag_ids = {}
+        self.done_checkbox_property_id = ""
+        self.done_checkbox_property_key = "done"
+        self.notes_property_id = ""
+        self.notes_property_key = ""
+
+    def set_status_options(self, options: List[str]) -> bool:
+        """Troca a lista de status. Se mudou, esquece os ids das tags para
+        que sejam redescobertas/criadas no próximo setup. Retorna se mudou."""
+        options = [o.strip() for o in options if o.strip()]
+        if not options or options == self.status_options:
+            return False
+        self.status_options = options
+        self.status_tag_ids = {}
+        return True
+
 
 @dataclass
 class GuiConfig:
@@ -117,9 +140,9 @@ class AppConfig:
     @staticmethod
     def from_dict(data: dict) -> "AppConfig":
         return AppConfig(
-            pomodoro=PomodoroConfig(**data.get("pomodoro", {})),
-            anytype=AnytypeConfig(**data.get("anytype", {})),
-            gui=GuiConfig(**data.get("gui", {})),
+            pomodoro=_build(PomodoroConfig, data.get("pomodoro")),
+            anytype=_build(AnytypeConfig, data.get("anytype")),
+            gui=_build(GuiConfig, data.get("gui")),
         )
 
     def to_dict(self) -> dict:
@@ -128,6 +151,13 @@ class AppConfig:
             "anytype": asdict(self.anytype),
             "gui": asdict(self.gui),
         }
+
+
+def _build(cls, data: Optional[dict]):
+    """Cria a seção a partir do dict, ignorando chaves desconhecidas (ex.:
+    de uma versão antiga ou futura do config.json) em vez de quebrar."""
+    known = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in (data or {}).items() if k in known})
 
 
 def load_config(path: str = CONFIG_PATH) -> AppConfig:
@@ -165,10 +195,10 @@ def _migrate_legacy_status_names(config: AppConfig) -> bool:
         return False
     if not all(name in _LEGACY_STATUS_MAP for name in old_options):
         return False  # o usuário customizou para algo que não reconhecemos: não mexe
-    config.anytype.status_options = ["To Do", "In Progress", "Done"]
-    config.anytype.in_progress_status_name = "In Progress"
-    config.anytype.done_status_name = "Done"
-    config.anytype.status_tag_ids = {}  # força re-descoberta/criação das tags novas
+    defaults = AnytypeConfig()
+    config.anytype.set_status_options(defaults.status_options)  # também zera as tags
+    config.anytype.in_progress_status_name = defaults.in_progress_status_name
+    config.anytype.done_status_name = defaults.done_status_name
     return True
 
 
