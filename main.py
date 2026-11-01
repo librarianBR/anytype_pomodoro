@@ -13,6 +13,7 @@ Tudo é feito por um menu interativo. Na primeira vez, você vai precisar:
 """
 from __future__ import annotations
 
+import datetime
 import sys
 
 from anytype_client import AnytypeClient, AnytypeError
@@ -167,10 +168,46 @@ class App:
 
     def _create_task(self):
         name = input_nonempty("Nome da tarefa: ")
-        desc = input("Descrição (opcional): ").strip()
         status = choose_from_list(self.config.anytype.status_options, lambda s: s)
-        task = self.task_manager.create_task(name, description=desc, status=status)
-        print(f"Tarefa criada: {task.name} [{task.status}]")
+        due = self._ask_due_date()
+        story = self._ask_user_story()
+        task = self.task_manager.create_task(name, description=story, status=status, due=due)
+        extra = f", entrega em {task.due.strftime('%d/%m/%Y')}" if task.due else ""
+        print(f"Tarefa criada: {task.name} [{task.status}]{extra}")
+
+    @staticmethod
+    def _ask_due_date():
+        """Data de entrega opcional, no formato dd/mm/aaaa."""
+        while True:
+            raw = input("Data de entrega (dd/mm/aaaa, Enter para nenhuma): ").strip()
+            if not raw:
+                return None
+            try:
+                return datetime.datetime.strptime(raw, "%d/%m/%Y").date()
+            except ValueError:
+                print("  (data inválida — use dd/mm/aaaa, ex.: 15/11/2026)")
+
+    @staticmethod
+    def _ask_user_story() -> str:
+        """História de usuário opcional, no formato do Scrum, montada a partir
+        das três perguntas clássicas + critérios de aceitação."""
+        resp = input("Escrever uma história de usuário (Scrum)? (s/N): ").strip().lower()
+        if resp != "s":
+            return ""
+        who = input_nonempty("  Como (tipo de usuário): ")
+        what = input_nonempty("  quero (objetivo): ")
+        why = input("  para (benefício, opcional): ").strip()
+        story = f"Como {who}, quero {what}" + (f" para {why}." if why else ".")
+        criteria = []
+        print("  Critérios de aceitação (um por linha, Enter vazio para terminar):")
+        while True:
+            line = input("   - ").strip()
+            if not line:
+                break
+            criteria.append(f"- {line}")
+        if criteria:
+            story += "\n\nCritérios de aceitação:\n" + "\n".join(criteria)
+        return story
 
     def _rename_task(self):
         task = self._pick_task()
@@ -283,17 +320,27 @@ class App:
                 f"Marcar a tarefa como '{self.config.anytype.done_status_name}'? (s/N): "
             ).strip().lower()
             if resp == "s":
-                try:
-                    self.task_manager.set_status(
-                        self.current_task_id, self.config.anytype.done_status_name
-                    )
-                    print(f"Tarefa marcada como {self.config.anytype.done_status_name}.")
-                    # Tarefa concluída sai da sessão; use 'vincular' para
-                    # escolher a próxima.
-                    self.current_task_id = None
-                    print("Tarefa desvinculada da sessão. Use 'vincular' para escolher a próxima.")
-                except AnytypeError as e:
-                    print(f"Não consegui atualizar a tarefa: {e}")
+                self._complete_current_task()
+
+    def _complete_current_task(self, note: str | None = None) -> bool:
+        """Marca a tarefa vinculada como concluída, registra `note` no
+        histórico (se houver) e a tira da sessão. O timer não é afetado."""
+        if not self.current_task_id:
+            print("Nenhuma tarefa vinculada.")
+            return False
+        try:
+            if note:
+                self.task_manager.add_note(self.current_task_id, note)
+            self.task_manager.set_status(self.current_task_id, self.config.anytype.done_status_name)
+        except (AnytypeError, SetupError) as e:
+            print(f"Não consegui atualizar a tarefa: {e}")
+            return False
+        self.current_task_id = None
+        print(
+            f"Tarefa marcada como {self.config.anytype.done_status_name} e desvinculada da sessão. "
+            "Use 'vincular' para escolher a próxima."
+        )
+        return True
 
     def _on_tick(self, status):
         # Contagem regressiva sonora nos últimos segundos de cada fase
@@ -338,7 +385,7 @@ class App:
         self.timer.start()
         print(
             "\nSessão iniciada. Comandos: status | pausar | retomar | "
-            "reiniciar | pular | vincular | desvincular | parar\n"
+            "reiniciar | pular | vincular | desvincular | concluir | parar\n"
         )
         while True:
             cmd = input("> ").strip().lower()
@@ -363,6 +410,24 @@ class App:
             elif cmd in ("desvincular", "unlink"):
                 self._link_task(None)
                 print("Desvinculado.")
+            elif cmd in ("concluir", "done", "feito"):
+                # concluir a tarefa a qualquer momento, sem esperar o ciclo
+                if not self.current_task_id:
+                    print("Nenhuma tarefa vinculada. Use 'vincular' primeiro.")
+                    continue
+                resp = input(
+                    f"Marcar a tarefa vinculada como '{self.config.anytype.done_status_name}'? (s/N): "
+                ).strip().lower()
+                if resp != "s":
+                    continue
+                note = input("Observação (opcional, Enter para pular): ").strip()
+                st = self.timer.status()
+                log_text = "Tarefa concluída"
+                if st.is_running and st.phase == Phase.WORK:
+                    log_text += f" durante o ciclo de foco {st.cycle} ({st.elapsed_seconds // 60} min de foco nele)"
+                if note:
+                    log_text += f" — {note}"
+                self._complete_current_task(log_text)
             elif cmd in ("parar", "sair", "stop", "q"):
                 self.timer.stop()
                 print("Sessão encerrada.")
@@ -370,7 +435,7 @@ class App:
             else:
                 print(
                     "Comandos: status | pausar | retomar | reiniciar | pular | "
-                    "vincular | desvincular | parar"
+                    "vincular | desvincular | concluir | parar"
                 )
 
     # --------------------------------------------------------------- menu

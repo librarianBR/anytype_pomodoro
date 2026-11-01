@@ -79,6 +79,13 @@ class AnytypeConfig:
     notes_property_id: str = ""
     notes_property_key: str = ""
 
+    # Propriedades nativas do Anytype usadas ao criar tarefas: a data de
+    # entrega (tipo "date", já existe no tipo Task embutido) e a descrição,
+    # onde fica a história de usuário (formato Scrum). Ajuste o key se a sua
+    # instalação usar outros.
+    due_date_property_key: str = "due_date"
+    description_property_key: str = "description"
+
 
 @dataclass
 class GuiConfig:

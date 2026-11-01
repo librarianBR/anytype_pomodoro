@@ -44,6 +44,10 @@ class Task:
     # Data de criação (propriedade nativa "created_date" do Anytype), no
     # fuso local; None se a sua versão do Anytype não a devolver.
     created: Optional[_dt.datetime] = None
+    # Data de entrega (propriedade nativa "due_date"); None se não definida.
+    due: Optional[_dt.date] = None
+    # Descrição do Anytype — onde fica a história de usuário (Scrum).
+    description: str = ""
 
 
 class TaskManager:
@@ -172,7 +176,32 @@ class TaskManager:
             status=status_name,
             raw=obj,
             created=self._extract_created_date(obj),
+            due=self._extract_due_date(obj),
+            description=self._extract_text(obj, self.cfg.description_property_key),
         )
+
+    def _extract_due_date(self, obj: Dict[str, Any]) -> Optional[_dt.date]:
+        """A data de entrega é um DIA, guardado pelo Anytype como meia-noite
+        UTC ("2026-11-15T00:00:00Z"). Pega só a parte da data, SEM converter
+        para o fuso local — senão, no Brasil (UTC-3), viraria o dia anterior."""
+        for prop in obj.get("properties", []):
+            if prop.get("key") != self.cfg.due_date_property_key:
+                continue
+            value = prop.get("date")
+            if not value:
+                return None
+            try:
+                return _dt.date.fromisoformat(str(value)[:10])
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _extract_text(obj: Dict[str, Any], key: str) -> str:
+        for prop in obj.get("properties", []):
+            if prop.get("key") == key:
+                return prop.get("text") or ""
+        return ""
 
     @staticmethod
     def _extract_created_date(obj: Dict[str, Any]) -> Optional[_dt.datetime]:
@@ -192,17 +221,36 @@ class TaskManager:
         return None
 
     # ---------------------------------------------------------------- CRUD
-    def create_task(self, name: str, description: str = "", status: Optional[str] = None) -> Task:
+    def create_task(
+        self,
+        name: str,
+        description: str = "",
+        status: Optional[str] = None,
+        due: Optional[_dt.date] = None,
+    ) -> Task:
+        """Cria a tarefa. `description` (ex.: uma história de usuário) e
+        `due` (data de entrega) são opcionais."""
         status = status or self.cfg.status_options[0]
+        properties = [self._status_property(status)]
+        if due:
+            properties.append({
+                "key": self.cfg.due_date_property_key,
+                "date": f"{due.isoformat()}T00:00:00Z",
+            })
+        description = (description or "").strip()
+        if description:
+            # Precisa ir como propriedade: o campo "description" de topo da
+            # requisição de criação é ignorado nesta versão da API.
+            properties.append({"key": self.cfg.description_property_key, "text": description})
         obj = self.client.create_object(
             self.cfg.space_id,
             name=name,
             type_key=self.cfg.task_type_key,
-            description=description,
-            properties=[self._status_property(status)],
+            properties=properties,
         )
         task = self._to_task(obj)
-        self._sync_done_checkbox(task.id, status == self.cfg.done_status_name)
+        if task.id:
+            self._sync_done_checkbox(task.id, status == self.cfg.done_status_name)
         return task
 
     def list_tasks(self) -> List[Task]:

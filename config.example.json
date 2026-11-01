@@ -29,7 +29,9 @@
     "done_checkbox_property_key": "done",
     "notes_property_name": "Notes",
     "notes_property_id": "",
-    "notes_property_key": ""
+    "notes_property_key": "",
+    "due_date_property_key": "due_date",
+    "description_property_key": "description"
   },
   "gui": {
     "mini_width": null,

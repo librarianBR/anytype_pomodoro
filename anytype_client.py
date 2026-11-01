@@ -35,6 +35,18 @@ TAG_COLORS = [
 ]
 
 
+def _unwrap_object(data: Any) -> Any:
+    """As respostas de criar/consultar/editar um objeto vêm como
+    {"object": {...}} nesta versão da API (outras versões usavam "data").
+    Devolve o objeto em si, aceitando os dois formatos."""
+    if isinstance(data, dict):
+        if isinstance(data.get("object"), dict):
+            return data["object"]
+        if isinstance(data.get("data"), dict):
+            return data["data"]
+    return data
+
+
 class AnytypeClient:
     def __init__(self, base_url: str, api_version: str, api_key: str = ""):
         self.base_url = base_url.rstrip("/")
@@ -162,13 +174,16 @@ class AnytypeClient:
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"name": name, "type_key": type_key}
         if description:
+            # Atenção: na versão 2025-11-08 da API este campo é ignorado na
+            # criação — para gravar a descrição, mande-a como propriedade
+            # {"key": "description", "text": ...} (é o que TaskManager faz).
             payload["description"] = description
         if body:
             payload["body"] = body
         if properties:
             payload["properties"] = properties
         data = self._request("POST", f"/v1/spaces/{space_id}/objects", json=payload)
-        return data.get("data", data)
+        return _unwrap_object(data)
 
     def update_object(
         self,
@@ -188,14 +203,14 @@ class AnytypeClient:
         data = self._request(
             "PATCH", f"/v1/spaces/{space_id}/objects/{object_id}", json=payload
         )
-        return data.get("data", data)
+        return _unwrap_object(data)
 
     def delete_object(self, space_id: str, object_id: str) -> None:
         self._request("DELETE", f"/v1/spaces/{space_id}/objects/{object_id}")
 
     def get_object(self, space_id: str, object_id: str) -> Dict[str, Any]:
         data = self._request("GET", f"/v1/spaces/{space_id}/objects/{object_id}")
-        return data.get("data", data)
+        return _unwrap_object(data)
 
     def list_objects(
         self, space_id: str, type_key: Optional[str] = None, limit: int = 100

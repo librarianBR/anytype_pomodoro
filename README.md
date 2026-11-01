@@ -11,8 +11,9 @@ com tempos configuráveis e integra a lista de tarefas com o **Anytype**
 - **Você sempre sabe o que está acontecendo**: a qualquer momento (comando
   `status`) mostra a fase atual (foco / pausa curta / pausa longa), o ciclo
   em andamento e quantos minutos/segundos faltam. Início e fim de cada fase
-  disparam uma notificação (terminal + notificação do SO, se tiver a lib
-  `plyer` instalada).
+  disparam uma notificação (terminal + notificação nativa do sistema
+  operacional), e os últimos 5 segundos de cada fase têm uma contagem
+  regressiva sonora.
 - **Tarefas no Anytype**: criar, renomear, excluir e mudar o status
   (padrão: To Do / In Progress / Done) de tarefas, usando a API
   local do Anytype Desktop — sem precisar de nenhum servidor externo, tudo
@@ -30,7 +31,10 @@ cd anytype_pomodoro
 pip install -r requirements.txt
 ```
 
-(`plyer` é opcional — sem ele, as notificações aparecem só no terminal.)
+(Notificações nativas: no Linux a aplicação usa o `notify-send`, que já vem
+com GNOME, KDE, XFCE etc. — se faltar, instale o pacote `libnotify-bin`. No
+Windows e no macOS usa o `plyer`, que é opcional — sem ele, as notificações
+aparecem só no terminal.)
 
 ## Pré-requisitos no Anytype
 
@@ -84,6 +88,35 @@ bruto" em cada tarefa para depuração) e **Configurações** (tempos do
 Pomodoro, sons, pareamento com o Anytype, escolha de espaço, nomes de
 tipo/propriedade e lista de status).
 
+### Criar tarefas: data de entrega e história de usuário
+
+Além do nome e do status inicial, cada tarefa nova pode ter:
+- **Data de entrega** — botão "Data de entrega" (abre um calendário); fica
+  gravada na propriedade nativa `Due date` do Anytype (já existe no tipo
+  Task embutido; configurável via `due_date_property_key`). Na lista, cada
+  tarefa mostra a entrega, com o aviso **(atrasada)** em vermelho se a data
+  já passou e ela não está concluída, e dá pra ordenar por "Entrega: mais
+  próxima primeiro".
+- **História de usuário (Scrum)** — campo de texto livre; o botão "Usar
+  modelo de história" preenche o formato clássico de backlog:
+
+  ```
+  Como <tipo de usuário>, quero <objetivo> para <benefício>.
+
+  Critérios de aceitação:
+  - Dado <contexto>, quando <ação>, então <resultado esperado>.
+  ```
+
+  É só substituir os campos entre `< >` (a aplicação avisa se algum ficar
+  sem preencher). A história é gravada na **descrição** da tarefa no
+  Anytype (propriedade nativa `Description`, configurável via
+  `description_property_key`), que aparece logo abaixo do título lá; na
+  lista daqui aparece a primeira linha (passe o mouse para ver tudo).
+
+Na CLI, a criação de tarefa pergunta a data de entrega (`dd/mm/aaaa`) e
+oferece montar a história com as perguntas "Como…", "quero…", "para…" e os
+critérios de aceitação.
+
 ### Filtros na aba Tarefas
 
 Acima da lista de tarefas há controles para escolher o que ver:
@@ -92,7 +125,8 @@ Acima da lista de tarefas há controles para escolher o que ver:
 - **Status** — Todos, Não concluídas (tudo que não está com o status de
   concluído, `done_status_name`) ou um status específico;
 - **Ordenar por** — data de criação (mais recentes ou mais antigas
-  primeiro) ou título (A → Z ou Z → A);
+  primeiro), título (A → Z ou Z → A) ou data de entrega (mais próxima
+  primeiro; tarefas sem entrega vão para o fim);
 - **Mostrar** — 10, 25, 50, 100 ou todas; o contador ao lado diz quantas
   estão sendo mostradas de quantas correspondem aos filtros.
 
@@ -172,10 +206,23 @@ Parar a sessão (botão "Parar") não desfaz o vínculo — isso é intencional,
 para você poder apertar "Iniciar" de novo sem precisar reselecionar a
 mesma tarefa.
 
-Já ao responder **"Sim"** no aviso "Ciclo de foco terminado" (marcar a
-tarefa como concluída), a tarefa é desvinculada: o dropdown volta vazio,
-sem ela na lista, esperando você escolher a próxima. Respondendo "Agora
-não", o vínculo continua como estava.
+### Concluir a tarefa
+
+Há duas formas de marcar a tarefa vinculada como concluída
+(`done_status_name`):
+- **A qualquer momento**, pelo botão **"Concluir tarefa"** (ao lado de
+  "Desvincular") — por exemplo, se você terminou antes de o ciclo de foco
+  acabar. Pede confirmação, aceita uma observação opcional e registra no
+  histórico "Tarefa concluída" (com o ciclo e os minutos de foco nele, se
+  um ciclo de foco estiver rodando). O timer continua normalmente.
+- **No fim de um ciclo de foco**, respondendo **"Sim"** no aviso "Ciclo de
+  foco terminado".
+
+Nos dois casos a tarefa é desvinculada: o dropdown volta vazio, sem ela na
+lista, esperando você escolher a próxima. Já o botão **"Desvincular"** só
+tira o vínculo — a tarefa continua com o status que tinha. Os dois botões
+ficam desabilitados enquanto não houver tarefa vinculada. Na CLI, o
+comando equivalente é `concluir`.
 
 ### Observações nas tarefas
 
@@ -222,7 +269,7 @@ No primeiro uso (em qualquer uma das duas interfaces), você vai precisar:
 4. Configurar tempos do Pomodoro: ajustar foco/pausas/ciclos.
 5. Iniciar uma sessão Pomodoro. Na CLI, comandos disponíveis durante a
    sessão: `status`, `pausar`, `retomar`, `reiniciar`, `pular`, `vincular`,
-   `desvincular`, `parar`. Na interface gráfica, os mesmos controles
+   `desvincular`, `concluir`, `parar`. Na interface gráfica, os mesmos controles
    aparecem como botões (`Reiniciar fase` volta a contagem da fase atual
    para o início, sem avançar de ciclo; vincular/desvincular tarefa
    funciona a qualquer momento, veja a seção correspondente abaixo).

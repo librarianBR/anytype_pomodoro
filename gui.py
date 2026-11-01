@@ -11,6 +11,7 @@ anytype_client.py, task_manager.py) — só muda a camada de interface.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import threading
 import unicodedata
@@ -45,6 +46,11 @@ PHASE_ICONS = {
 
 def main(page: ft.Page) -> None:
     page.title = "Pomodoro + Anytype"
+    # Textos embutidos do Flutter (calendário, menus etc.) em português
+    page.locale_configuration = ft.LocaleConfiguration(
+        supported_locales=[ft.Locale("pt", "BR"), ft.Locale("en", "US")],
+        current_locale=ft.Locale("pt", "BR"),
+    )
     page.padding = 24
     page.scroll = ft.ScrollMode.AUTO
     try:
@@ -174,8 +180,7 @@ def main(page: ft.Page) -> None:
         state["linked_task_id"] = new_task_id
         task_dropdown.value = new_task_id
         if new_task_id:
-            label = next((o.text for o in task_dropdown.options if o.key == new_task_id), "")
-            linked_task_text.value = f"Vinculada a: {label}"
+            linked_task_text.value = f"Vinculada a: {linked_task_label()}"
             try:
                 task_manager.set_status(new_task_id, config.anytype.in_progress_status_name)
                 task_manager.add_note(new_task_id, "Sessão vinculada a esta tarefa.")
@@ -183,6 +188,7 @@ def main(page: ft.Page) -> None:
                 snack(str(ex), error=True)
         else:
             linked_task_text.value = ""
+        update_link_buttons()
         page.update()
 
     def on_task_dropdown_change(e):
@@ -191,8 +197,97 @@ def main(page: ft.Page) -> None:
     def unlink_task(e):
         link_task(None)
 
+    def complete_linked_task(note: Optional[str] = None) -> bool:
+        """Marca a tarefa vinculada como concluída (done_status_name),
+        registra `note` no histórico (se houver) e a tira da sessão: o
+        dropdown volta vazio, sem ela na lista, esperando a próxima. O timer
+        não é afetado. Não usa link_task(None) para não registrar uma
+        observação "desvinculada" redundante logo após a de conclusão.
+        Retorna False (e mostra o erro) se o Anytype recusar."""
+        task_id = state.get("linked_task_id")
+        if not task_id:
+            return False
+        try:
+            if note:
+                task_manager.add_note(task_id, note)
+            task_manager.set_status(task_id, config.anytype.done_status_name)
+        except (AnytypeError, SetupError) as ex:
+            snack(str(ex), error=True)
+            return False
+        state["linked_task_id"] = None
+        linked_task_text.value = ""
+        refresh_task_dropdown()
+        update_link_buttons()
+        page.update()
+        return True
+
+    def linked_task_label() -> str:
+        """Nome da tarefa vinculada, sem o "[status]" do texto do dropdown —
+        esse status foi lido ao carregar a lista e fica desatualizado assim
+        que o vínculo marca a tarefa como "em andamento"."""
+        task_id = state.get("linked_task_id")
+        text = next((o.text for o in task_dropdown.options if o.key == task_id), "")
+        if text.startswith("[") and "] " in text:
+            text = text.split("] ", 1)[1]
+        return f"'{text}'" if text else "a tarefa vinculada"
+
+    def ask_complete_task(e=None):
+        """Botão "Concluir tarefa": concluir a qualquer momento, sem esperar
+        o ciclo de foco acabar (ex.: terminou a tarefa no meio do ciclo)."""
+        if not state.get("linked_task_id"):
+            return
+        note_field = ft.TextField(
+            label="Observação (opcional)", multiline=True, min_lines=2, max_lines=4
+        )
+
+        def confirm(e):
+            status = state["timer"].status() if state["timer"] else None
+            log_text = "Tarefa concluída"
+            if status and status.is_running and status.phase == Phase.WORK:
+                log_text += f" durante o ciclo de foco {status.cycle} ({status.elapsed_seconds // 60} min de foco nele)"
+            note_text = (note_field.value or "").strip()
+            if note_text:
+                log_text += f" — {note_text}"
+            close_dialog(dlg)
+            if complete_linked_task(log_text):
+                snack(f"Tarefa marcada como '{config.anytype.done_status_name}'. Escolha a próxima quando quiser.")
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Concluir tarefa"),
+            content=ft.Column(
+                [
+                    ft.Text(f"Marcar {linked_task_label()} como '{config.anytype.done_status_name}'?"),
+                    ft.Text(
+                        "Ela sai da sessão e o timer continua rodando normalmente.",
+                        size=12,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    note_field,
+                ],
+                tight=True,
+                spacing=10,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: close_dialog(dlg)),
+                ft.Button("Concluir", icon=ft.Icons.TASK_ALT, on_click=confirm),
+            ],
+            open=True,
+        )
+        page.show_dialog(dlg)
+        page.update()
+
     task_dropdown.on_select = on_task_dropdown_change
     unlink_btn = ft.Button("Desvincular", icon=ft.Icons.LINK_OFF, on_click=unlink_task)
+    complete_btn = ft.Button("Concluir tarefa", icon=ft.Icons.TASK_ALT, on_click=ask_complete_task)
+
+    def update_link_buttons():
+        """Desvincular/Concluir só fazem sentido com uma tarefa vinculada."""
+        has_task = bool(state.get("linked_task_id"))
+        unlink_btn.disabled = not has_task
+        complete_btn.disabled = not has_task
+
+    update_link_buttons()
 
     def on_phase_start(phase: Phase, total_seconds: int, cycle: int):
         notify(f"{PHASE_LABELS[phase]} iniciado", f"Ciclo {cycle}")
@@ -230,23 +325,15 @@ def main(page: ft.Page) -> None:
                 log_text = f"Sessão de foco concluída ({minutes:g} min)"
                 if note_text:
                     log_text += f" — {note_text}"
-                try:
-                    task_manager.add_note(state["linked_task_id"], log_text)
-                    if mark_done:
-                        task_manager.set_status(state["linked_task_id"], config.anytype.done_status_name)
-                        # Tarefa concluída sai da sessão: o dropdown volta
-                        # vazio (e sem ela na lista), esperando a próxima.
-                        # Não usa link_task(None) para não registrar uma
-                        # observação "desvinculada" redundante logo após a
-                        # de conclusão.
-                        state["linked_task_id"] = None
-                        linked_task_text.value = ""
-                        refresh_task_dropdown()
+                if mark_done:
+                    if complete_linked_task(log_text):
                         snack(f"Tarefa marcada como '{config.anytype.done_status_name}' e observação registrada.")
-                    else:
+                else:
+                    try:
+                        task_manager.add_note(state["linked_task_id"], log_text)
                         snack("Observação registrada na tarefa.")
-                except (AnytypeError, SetupError) as ex:
-                    snack(str(ex), error=True)
+                    except (AnytypeError, SetupError) as ex:
+                        snack(str(ex), error=True)
                 close_dialog(dlg)
                 if state["timer"]:
                     state["timer"].resume()
@@ -371,7 +458,7 @@ def main(page: ft.Page) -> None:
                 cycle_text,
                 progress,
                 ft.Container(height=10),
-                ft.Row([task_dropdown, unlink_btn], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Row([task_dropdown, unlink_btn, complete_btn], alignment=ft.MainAxisAlignment.CENTER, wrap=True),
                 linked_task_text,
                 ft.Container(height=10),
                 ft.Row(
@@ -394,6 +481,70 @@ def main(page: ft.Page) -> None:
         value=config.anytype.status_options[0] if config.anytype.status_options else None,
     )
 
+    # ---- data de entrega (opcional) da nova tarefa
+    state["new_task_due"] = None  # type: Optional[datetime.date]
+    due_button = ft.OutlinedButton("Data de entrega", icon=ft.Icons.CALENDAR_MONTH)
+    due_clear_btn = ft.IconButton(ft.Icons.CLOSE, tooltip="Remover data de entrega", visible=False)
+
+    def set_new_task_due(value):
+        state["new_task_due"] = value
+        due_button.content = f"Entrega: {value.strftime('%d/%m/%Y')}" if value else "Data de entrega"
+        due_clear_btn.visible = bool(value)
+        page.update()
+
+    def on_due_picked(e):
+        value = e.control.value
+        # o DatePicker devolve um datetime; só o dia interessa
+        set_new_task_due(value.date() if isinstance(value, datetime.datetime) else value)
+
+    def open_due_picker(e):
+        today = datetime.date.today()
+        page.show_dialog(
+            ft.DatePicker(
+                value=state["new_task_due"] or today,
+                first_date=today - datetime.timedelta(days=365),
+                last_date=today + datetime.timedelta(days=365 * 5),
+                help_text="Data de entrega",
+                locale=ft.Locale("pt", "BR"),
+                cancel_text="Cancelar",
+                confirm_text="OK",
+                on_change=on_due_picked,
+            )
+        )
+
+    due_button.on_click = open_due_picker
+    due_clear_btn.on_click = lambda e: set_new_task_due(None)
+
+    # ---- história de usuário (Scrum), gravada na descrição da tarefa
+    STORY_PLACEHOLDERS = ("<tipo de usuário>", "<objetivo>", "<benefício>", "<contexto>", "<ação>", "<resultado esperado>")
+    STORY_TEMPLATE = (
+        "Como <tipo de usuário>, quero <objetivo> para <benefício>.\n"
+        "\n"
+        "Critérios de aceitação:\n"
+        "- Dado <contexto>, quando <ação>, então <resultado esperado>."
+    )
+    new_task_story = ft.TextField(
+        label="História de usuário (opcional)",
+        hint_text="Como <tipo de usuário>, quero <objetivo> para <benefício>.",
+        multiline=True,
+        min_lines=2,
+        max_lines=6,
+        expand=True,
+    )
+
+    def use_story_template(e):
+        if (new_task_story.value or "").strip():
+            snack("O campo de história já tem texto — apague-o para usar o modelo.", error=True)
+            return
+        new_task_story.value = STORY_TEMPLATE
+        page.update()
+        new_task_story.focus()
+
+    story_template_btn = ft.TextButton(
+        "Usar modelo de história", icon=ft.Icons.AUTO_STORIES, on_click=use_story_template,
+        tooltip="Preenche com o formato de história de usuário do Scrum: substitua os campos entre < >",
+    )
+
     # ---- filtros da lista de tarefas (aplicados sobre a lista já carregada
     # do Anytype, guardada em state["tasks_cache"] — mudar um filtro não faz
     # nova chamada à API; só "Atualizar lista" e as edições recarregam).
@@ -403,6 +554,7 @@ def main(page: ft.Page) -> None:
         ("created_asc", "Criação: mais antigas primeiro"),
         ("name_asc", "Título: A → Z"),
         ("name_desc", "Título: Z → A"),
+        ("due_asc", "Entrega: mais próxima primeiro"),
     ]
     STATUS_ALL, STATUS_PENDING = "", "__pending__"
     LIMIT_OPTIONS = [10, 25, 50, 100, 0]  # 0 = todas
@@ -413,7 +565,7 @@ def main(page: ft.Page) -> None:
     filter_status = ft.Dropdown(label="Status", width=190, dense=True)
     filter_sort = ft.Dropdown(
         label="Ordenar por",
-        width=280,
+        width=330,
         dense=True,
         options=[ft.DropdownOption(key=k, text=t) for k, t in SORT_OPTIONS],
         value=config.gui.tasks_sort if any(k == config.gui.tasks_sort for k, _ in SORT_OPTIONS) else "created_desc",
@@ -462,6 +614,10 @@ def main(page: ft.Page) -> None:
             undated = [t for t in result if not t.created]
             dated.sort(key=lambda t: t.created, reverse=(sort == "created_desc"))
             result = dated + undated
+        elif sort == "due_asc":
+            # sem data de entrega vão para o fim
+            with_due = sorted((t for t in result if t.due), key=lambda t: t.due)
+            result = with_due + [t for t in result if not t.due]
         else:
             result.sort(key=lambda t: _normalize(t.name), reverse=(sort == "name_desc"))
         return result
@@ -624,23 +780,35 @@ def main(page: ft.Page) -> None:
 
     def build_task_row(task: Task) -> ft.Control:
         status_dd = ft.Dropdown(
-            width=150,
+            width=175,
             value=task.status if task.status in config.anytype.status_options else None,
             options=[ft.DropdownOption(key=s, text=s) for s in config.anytype.status_options],
         )
         status_dd.on_select = make_status_change_handler(task, status_dd)
         created_label = task.created.strftime("Criada em %d/%m/%Y %H:%M") if task.created else "Data de criação desconhecida"
+        info_spans = [ft.TextSpan(created_label)]
+        if task.due:
+            overdue = task.due < datetime.date.today() and task.status != config.anytype.done_status_name
+            info_spans.append(ft.TextSpan(f"  ·  Entrega: {task.due.strftime('%d/%m/%Y')}"))
+            if overdue:
+                info_spans.append(
+                    ft.TextSpan("  (atrasada)", style=ft.TextStyle(color=ft.Colors.RED_400, weight=ft.FontWeight.BOLD))
+                )
+        texts = [
+            ft.Text(task.name, overflow=ft.TextOverflow.ELLIPSIS),
+            ft.Text(spans=info_spans, size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+        ]
+        if task.description.strip():
+            # só a primeira linha da história, para a lista não ficar enorme
+            first_line = task.description.strip().splitlines()[0]
+            texts.append(
+                ft.Text(first_line, size=12, italic=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+                        tooltip=task.description.strip())
+            )
         return ft.Container(
             content=ft.Row(
                 [
-                    ft.Column(
-                        [
-                            ft.Text(task.name, overflow=ft.TextOverflow.ELLIPSIS),
-                            ft.Text(created_label, size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ],
-                        spacing=2,
-                        expand=True,
-                    ),
+                    ft.Column(texts, spacing=2, expand=True),
                     status_dd,
                     ft.IconButton(ft.Icons.EDIT, tooltip="Renomear", on_click=lambda e, t=task: rename_task_dialog(t)),
                     ft.IconButton(ft.Icons.EDIT_NOTE, tooltip="Observações", on_click=lambda e, t=task: show_notes_dialog(t)),
@@ -689,10 +857,18 @@ def main(page: ft.Page) -> None:
         if not name:
             snack("Digite um nome para a tarefa.", error=True)
             return
+        story = (new_task_story.value or "").strip()
+        if any(ph in story for ph in STORY_PLACEHOLDERS):
+            snack("Substitua os campos entre < > do modelo de história (ou apague a parte que não usar).", error=True)
+            return
         try:
             task_manager.setup()
-            task_manager.create_task(name, status=new_task_status.value)
+            task_manager.create_task(
+                name, description=story, status=new_task_status.value, due=state["new_task_due"]
+            )
             new_task_name.value = ""
+            new_task_story.value = ""
+            set_new_task_due(None)
             snack("Tarefa criada.")
             refresh_tasks_list()
         except (AnytypeError, SetupError) as ex:
@@ -707,7 +883,15 @@ def main(page: ft.Page) -> None:
         return ft.Column(
             [
                 ft.Text("Tarefas (Anytype)", size=22, weight=ft.FontWeight.BOLD),
-                ft.Row([new_task_name, new_task_status, ft.Button("Criar", icon=ft.Icons.ADD, on_click=create_task)]),
+                # Sem wrap=True aqui: o campo de nome usa expand=True, e o
+                # Flutter não aceita filho "expandido" numa linha que quebra
+                # (a aba inteira vira um quadro cinza de erro).
+                ft.Row(
+                    [new_task_name, new_task_status, due_button, due_clear_btn,
+                     ft.Button("Criar", icon=ft.Icons.ADD, on_click=create_task)],
+                ),
+                ft.Row([new_task_story, story_template_btn], vertical_alignment=ft.CrossAxisAlignment.START),
+                ft.Divider(height=1),
                 ft.Row(
                     [filter_title, filter_status, filter_sort, filter_limit],
                     wrap=True,
@@ -724,6 +908,10 @@ def main(page: ft.Page) -> None:
                 tasks_list,
             ],
             spacing=12,
+            # Sem scroll aqui: tasks_list (ListView com expand=True) já rola
+            # sozinha, e "expandir" dentro de uma coluna rolável é erro de
+            # layout no Flutter.
+            expand=True,
         )
 
     # ========================================================= CONFIGURAÇÕES
