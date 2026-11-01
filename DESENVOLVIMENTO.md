@@ -6,9 +6,10 @@ aplicação, veja o [README](README.md).
 ## Ambiente
 
 ```bash
-uv sync            # cria o .venv com as dependências do uv.lock
+uv sync            # cria o .venv com as dependências (inclui o pytest)
 uv run gui.py      # interface gráfica (Flet)
 uv run main.py     # linha de comando
+uv run pytest      # testes automatizados
 ```
 
 O `config.json` é criado na primeira execução a partir de
@@ -16,26 +17,81 @@ O `config.json` é criado na primeira execução a partir de
 no `.gitignore`: nunca faça commit dele. Para mudar os valores padrão de
 quem usa o projeto pela primeira vez, edite `config.example.json`.
 
-## Estrutura dos arquivos
+## Estrutura do código
 
-- `pomodoro_timer.py`: núcleo do timer. Roda em thread própria e não
-  depende do Anytype, então pode ser reaproveitado em outra interface.
-  Expõe callbacks `on_phase_start`, `on_phase_end` e `on_tick`.
-- `anytype_client.py`: cliente HTTP puro para a API local do Anytype
-  (autenticação, tipos, propriedades, tags, objetos).
-- `task_manager.py`: regras de negócio de "tarefa com status" sobre o
-  cliente (setup, CRUD, status, notas, data de entrega, descrição).
-- `config.py`: modelo de configuração e leitura/escrita do `config.json`.
-- `paths.py`: resolve onde ficam o `config.json` e os sons, tanto rodando
-  com `python` quanto empacotado pelo PyInstaller.
-- `notifier.py`: notificações (terminal, `notify-send` no Linux, `plyer`
-  nos demais) e sons (tocador do sistema).
-- `main.py`: menu interativo (CLI).
-- `gui.py`: interface gráfica (Flet), incluindo modo mini.
-- `generate_sounds.py`: sintetiza os sons em `assets/*.wav` (sinos de
-  início de fase e tiques da contagem regressiva). Rode de novo depois de
-  mudar notas ou timbre.
-- `pomodoro.spec`: receita do PyInstaller para gerar um executável.
+```
+gui.py, main.py          pontos de entrada (só chamam o pacote)
+generate_sounds.py       gera os sons em assets/*.wav
+pomodoro_app/
+  config.py              configuração (config.json) e seus ajustes
+  paths.py               onde ficam config.json e assets (script ou executável)
+  anytype_client.py      cliente HTTP da API local do Anytype
+  task_manager.py        tarefas: preparar o espaço, CRUD, status, observações
+  pomodoro_timer.py      o timer (thread própria, sem I/O) e os nomes das fases
+  session.py             regras da sessão, comuns às duas interfaces
+  task_filters.py        busca, filtro e ordenação da lista (funções puras)
+  user_story.py          modelo de história de usuário (Scrum)
+  formatting.py          tempo (mm:ss) e datas (dd/mm/aaaa)
+  sounds.py              sons de fase e contagem regressiva
+  notifier.py            notificações do sistema
+  cli.py                 interface de linha de comando
+  ui/
+    app.py               janela, navegação e modo mini
+    context.py           o que as telas compartilham (config, Anytype,
+                         sessão, avisos e diálogos padronizados)
+    theme.py             paletas, cores e ícones das fases, estilos
+    pomodoro_view.py     tela Pomodoro
+    tasks_view.py        tela Tarefas
+    settings_view.py     tela Configurações
+tests/                   testes automatizados (pytest)
+```
+
+As camadas dependem só "para baixo": as interfaces (`cli.py` e `ui/`)
+usam `session.py`, que usa `task_manager.py` e `pomodoro_timer.py`, que
+usam `anytype_client.py` e `config.py`. Nada abaixo das interfaces
+importa o Flet.
+
+**Onde mexer:**
+
+- Comportamento da sessão (vincular, concluir, o que vai para o histórico,
+  sons, notificações): `session.py`. Vale para a GUI e para a CLI de uma vez.
+- O que a interface mostra: o módulo da tela em `ui/` (ou `cli.py`).
+- Conversa com o Anytype: `task_manager.py` (regras) e `anytype_client.py`
+  (HTTP).
+- Cores e estilos: `ui/theme.py`.
+
+**`PomodoroSession`** (`session.py`) avisa a interface por três callbacks,
+chamados na thread do timer: `on_phase_start`, `on_tick` e `on_focus_end`.
+No fim de um ciclo de foco com tarefa vinculada, a sessão pausa o timer e
+chama `on_focus_end`; a interface pergunta ao usuário e responde com
+`finish_focus(...)`, que registra no histórico e retoma o timer.
+
+## Testes
+
+```bash
+uv run pytest            # todos (cerca de 5 s)
+uv run pytest -k session # só os que têm "session" no nome
+```
+
+Os testes não precisam do Anytype nem de internet: `tests/conftest.py` tem
+um `FakeClient`, um Anytype em memória que responde nos mesmos formatos da
+API real (inclusive as particularidades listadas abaixo). Eles também
+garantem que nada é gravado no `config.json` de verdade e que nenhum som ou
+notificação é disparado.
+
+| Arquivo | O que cobre |
+|---|---|
+| `test_task_manager.py` | preparação do espaço, criar/listar/renomear/excluir, status e checkbox Done, observações, data de entrega (sem erro de fuso), troca de espaço |
+| `test_session.py` | vincular/trocar/desvincular, concluir, fim do ciclo de foco (pausa, pergunta, retomada mesmo com erro), sons |
+| `test_task_filters.py` | busca sem acentos, filtros de status, ordenações e limite |
+| `test_config.py` | salvar/carregar, chaves desconhecidas, migração de nomes antigos, troca de espaço e de status |
+| `test_anytype_client.py` | formatos de resposta, paginação, configuração |
+| `test_formatting.py`, `test_user_story.py` | tempo, datas e história de usuário |
+| `test_timer_and_sounds.py` | sequência real de fases (com fases de 1–2 s) e sons |
+
+A interface gráfica em si não tem testes automatizados: as regras que ela
+usa estão em `session.py`, `task_filters.py` e `task_manager.py`, que são
+testados; o desenho das telas é conferido abrindo a aplicação.
 
 ## Integração com a API do Anytype
 
@@ -71,7 +127,7 @@ Particularidades já encontradas nessa versão:
   `Status` sozinho; `TaskManager._sync_done_checkbox` sincroniza os dois em
   modo melhor esforço.
 
-O reconhecimento do status (`TaskManager._to_task`) tolera variações: a
+O reconhecimento do status (`TaskManager.to_task`) tolera variações: a
 propriedade pode vir por `id` ou `key`, e o valor de um "select" como
 string ou objeto `{"id", "name"}`. Se o status aparecer como `?`, o botão
 "Ver JSON bruto" da aba Tarefas mostra o que a instalação devolve.
@@ -79,11 +135,14 @@ string ou objeto `{"id", "name"}`. Se o status aparecer como `?`, o botão
 ## Interface (Flet)
 
 - O timer roda em outra thread: mudanças de interface vindas dele passam
-  por `schedule_on_ui` (`page.loop.call_soon_threadsafe`).
+  por `AppContext.run_on_ui` (`page.loop.call_soon_threadsafe`). Eventos
+  que chegam depois de "Parar" são descartados (`session.is_running`).
+- Para falar com o Anytype a partir de uma tela, use `ctx.attempt(ação,
+  "mensagem de sucesso")`: mostra o aviso de sucesso ou o erro, sem travar.
 - **Cuidado com layout**: um filho com `expand=True` dentro de uma `Row`
   com `wrap=True`, ou dentro de uma `Column` com `scroll`, é erro no
   Flutter, e a área inteira vira um quadro cinza (sem erro no terminal).
-- Sons usam o tocador do sistema (`notifier.play_sound`) em vez do
+- Sons usam o tocador do sistema (`sounds.play_sound`) em vez do
   controle `Audio` do Flet, que se mostrou inconsistente entre plataformas.
 - Redimensionar a janela em tempo de execução não funciona em Wayland
   nativo ([flet-dev/flet#5988](https://github.com/flet-dev/flet/issues/5988));
@@ -98,8 +157,8 @@ pyinstaller pomodoro.spec
 
 O executável fica em `dist/` (`PomodoroAnytype.exe` no Windows). O
 `config.json` é criado ao lado dele e persiste entre execuções (veja
-`paths.py`). A receita inclui a pasta `assets/`, que o PyInstaller não
-inclui sozinho.
+`pomodoro_app/paths.py`). A receita inclui a pasta `assets/` e o
+`config.example.json`, que o PyInstaller não inclui sozinho.
 
 Sem o `.spec`, o equivalente no Windows é:
 

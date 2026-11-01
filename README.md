@@ -165,13 +165,16 @@ Mudou algo direto no Anytype? Clique em **"Atualizar lista"**.
   Cada fase do Pomodoro ganha uma cor própria da paleta, para você
   reconhecer de relance se está em foco ou em pausa.
 - **Tempos**: foco, pausa curta, pausa longa e quantos ciclos até a pausa
-  longa.
+  longa (números maiores que zero; aceita fração, como `0.5`). Clique em
+  **"Salvar tempos"**; os novos tempos valem a partir da próxima sessão.
 - **Sons**: liga ou desliga todos os sons. Os botões **"Testar sons"** tocam
   cada som, inclusive a contagem regressiva, sem esperar uma fase acabar.
 - **Conexão com o Anytype**: pareamento, escolha do espaço e os nomes do
   tipo de tarefa, da propriedade de status e das opções de status. Se você
   usa nomes próprios (por exemplo "A fazer / Fazendo / Feito"), informe-os
   aqui e indique qual conta como "em andamento" e qual como "concluído".
+  Depois de mudar algo, clique em **"Salvar configurações"** e em
+  **"Testar / preparar"**, que procura os novos nomes no Anytype.
 
 ### Modo mini
 
@@ -234,8 +237,9 @@ Não compartilhe esse arquivo.
 
 ## Para desenvolvedores
 
-Estrutura do código, detalhes da integração com a API do Anytype e como
-gerar um executável: veja [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).
+Estrutura do código, como rodar os testes automatizados (`uv run pytest`),
+detalhes da integração com a API do Anytype e como gerar um executável:
+veja [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).
 
 ## Licença
 

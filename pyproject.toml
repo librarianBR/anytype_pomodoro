@@ -12,3 +12,14 @@ dependencies = [
     "plyer>=2.1",
     "requests>=2.34.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# o plugin do anyio (vem com o Flet) emite um aviso de depreciação do pytest
+addopts = "-p no:anyio"
