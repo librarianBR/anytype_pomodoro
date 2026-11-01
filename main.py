@@ -366,7 +366,7 @@ class App:
     # --------------------------------------------------------------- menu
     def main_menu(self):
         while True:
-            print("\n===== Pomodoro + Anytype =====")
+            print("\n===== Anytype + Pomodoro =====")
             print("1. Iniciar sessão Pomodoro")
             print("2. Configurar tempos do Pomodoro")
             print("3. Parear com o Anytype")

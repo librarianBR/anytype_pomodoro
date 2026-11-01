@@ -1,10 +1,14 @@
 [project]
 name = "anytype-pomodoro"
 version = "0.1.0"
-description = "Add your description here"
+description = "Timer Pomodoro com tarefas integradas ao Anytype (CLI e GUI em Flet)"
 readme = "README.md"
+authors = [
+    { name = "Cristiano", email = "cristiano_motta@yahoo.com.br" }
+]
 requires-python = ">=3.14"
 dependencies = [
     "flet>=1.0.0",
+    "plyer>=2.1",
     "requests>=2.34.2",
 ]
