@@ -12,13 +12,15 @@ anytype_client.py, task_manager.py) — só muda a camada de interface.
 from __future__ import annotations
 
 import json
+import threading
+import unicodedata
 from typing import Optional
 
 import flet as ft
 
 from anytype_client import AnytypeClient, AnytypeError
 from config import AppConfig, load_config, save_config
-from notifier import notify, play_sound, sound_path_for_phase
+from notifier import COUNTDOWN_SECONDS, countdown_sound_path, notify, play_sound, sound_path_for_phase
 from pomodoro_timer import Phase, PomodoroTimer
 from task_manager import SetupError, Task, TaskManager
 
@@ -76,6 +78,12 @@ def main(page: ft.Page) -> None:
         if not force and not config.pomodoro.sound_enabled:
             return
         play_sound(sound_path_for_phase(phase.value))
+
+    def play_countdown_demo():
+        """Toca a contagem regressiva completa (5…1), um tique por segundo,
+        para testar nas Configurações sem esperar uma fase acabar."""
+        for i, remaining in enumerate(range(COUNTDOWN_SECONDS, 0, -1)):
+            threading.Timer(i, play_sound, args=(countdown_sound_path(remaining),)).start()
 
     def snack(message: str, error: bool = False):
         page.show_dialog(
@@ -226,10 +234,18 @@ def main(page: ft.Page) -> None:
                     task_manager.add_note(state["linked_task_id"], log_text)
                     if mark_done:
                         task_manager.set_status(state["linked_task_id"], config.anytype.done_status_name)
+                        # Tarefa concluída sai da sessão: o dropdown volta
+                        # vazio (e sem ela na lista), esperando a próxima.
+                        # Não usa link_task(None) para não registrar uma
+                        # observação "desvinculada" redundante logo após a
+                        # de conclusão.
+                        state["linked_task_id"] = None
+                        linked_task_text.value = ""
+                        refresh_task_dropdown()
                         snack(f"Tarefa marcada como '{config.anytype.done_status_name}' e observação registrada.")
                     else:
                         snack("Observação registrada na tarefa.")
-                except AnytypeError as ex:
+                except (AnytypeError, SetupError) as ex:
                     snack(str(ex), error=True)
                 close_dialog(dlg)
                 if state["timer"]:
@@ -274,6 +290,12 @@ def main(page: ft.Page) -> None:
             schedule_on_ui(ask_mark_done)
 
     def on_tick(status):
+        # Contagem regressiva sonora nos últimos segundos da fase. Tocada
+        # direto aqui (thread do timer), sem esperar o loop da interface,
+        # para o tique sair no segundo certo; play_sound não bloqueia.
+        if config.pomodoro.sound_enabled:
+            play_sound(countdown_sound_path(status.remaining_seconds))
+
         def apply():
             m, s = divmod(max(status.remaining_seconds, 0), 60)
             time_text.value = f"{m:02d}:{s:02d}"
@@ -371,6 +393,118 @@ def main(page: ft.Page) -> None:
         options=[ft.DropdownOption(key=s, text=s) for s in config.anytype.status_options],
         value=config.anytype.status_options[0] if config.anytype.status_options else None,
     )
+
+    # ---- filtros da lista de tarefas (aplicados sobre a lista já carregada
+    # do Anytype, guardada em state["tasks_cache"] — mudar um filtro não faz
+    # nova chamada à API; só "Atualizar lista" e as edições recarregam).
+    state["tasks_cache"] = []
+    SORT_OPTIONS = [
+        ("created_desc", "Criação: mais recentes primeiro"),
+        ("created_asc", "Criação: mais antigas primeiro"),
+        ("name_asc", "Título: A → Z"),
+        ("name_desc", "Título: Z → A"),
+    ]
+    STATUS_ALL, STATUS_PENDING = "", "__pending__"
+    LIMIT_OPTIONS = [10, 25, 50, 100, 0]  # 0 = todas
+
+    filter_title = ft.TextField(
+        label="Buscar no título", prefix_icon=ft.Icons.SEARCH, width=260, dense=True
+    )
+    filter_status = ft.Dropdown(label="Status", width=190, dense=True)
+    filter_sort = ft.Dropdown(
+        label="Ordenar por",
+        width=280,
+        dense=True,
+        options=[ft.DropdownOption(key=k, text=t) for k, t in SORT_OPTIONS],
+        value=config.gui.tasks_sort if any(k == config.gui.tasks_sort for k, _ in SORT_OPTIONS) else "created_desc",
+    )
+    filter_limit = ft.Dropdown(
+        label="Mostrar",
+        width=120,
+        dense=True,
+        options=[ft.DropdownOption(key=str(n), text=str(n) if n else "Todas") for n in LIMIT_OPTIONS],
+        value=str(config.gui.tasks_limit) if config.gui.tasks_limit in LIMIT_OPTIONS else "25",
+    )
+    tasks_count_text = ft.Text("", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
+
+    def refresh_status_filter_options():
+        filter_status.options = [
+            ft.DropdownOption(key=STATUS_ALL, text="Todos"),
+            ft.DropdownOption(key=STATUS_PENDING, text="Não concluídas"),
+        ] + [ft.DropdownOption(key=s, text=s) for s in config.anytype.status_options]
+        valid = {o.key for o in filter_status.options}
+        wanted = config.gui.tasks_status_filter
+        filter_status.value = wanted if wanted in valid else STATUS_ALL
+
+    refresh_status_filter_options()
+
+    def _normalize(text: str) -> str:
+        """Minúsculas e sem acentos, para a busca achar "tarefa" em "Tárefa"."""
+        decomposed = unicodedata.normalize("NFKD", text or "")
+        return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+    def filtered_tasks(tasks: list) -> list:
+        query = _normalize(filter_title.value or "").strip()
+        status = filter_status.value or STATUS_ALL
+        result = [
+            t for t in tasks
+            if (not query or query in _normalize(t.name))
+            and (
+                status == STATUS_ALL
+                or (status == STATUS_PENDING and t.status != config.anytype.done_status_name)
+                or t.status == status
+            )
+        ]
+        sort = filter_sort.value or "created_desc"
+        if sort.startswith("created"):
+            # tarefas sem data de criação vão sempre para o fim da lista
+            dated = [t for t in result if t.created]
+            undated = [t for t in result if not t.created]
+            dated.sort(key=lambda t: t.created, reverse=(sort == "created_desc"))
+            result = dated + undated
+        else:
+            result.sort(key=lambda t: _normalize(t.name), reverse=(sort == "name_desc"))
+        return result
+
+    def render_tasks():
+        """Redesenha a lista a partir do cache, aplicando os filtros."""
+        tasks = state["tasks_cache"]
+        visible = filtered_tasks(tasks)
+        limit = int(filter_limit.value or 0)
+        shown = visible[:limit] if limit else visible
+        tasks_list.controls.clear()
+        if not tasks:
+            tasks_list.controls.append(ft.Text("(nenhuma tarefa)"))
+        elif not visible:
+            tasks_list.controls.append(ft.Text("(nenhuma tarefa corresponde aos filtros)"))
+        for t in shown:
+            tasks_list.controls.append(build_task_row(t))
+        tasks_count_text.value = (
+            f"Mostrando {len(shown)} de {len(visible)} tarefa(s)"
+            + (f" — {len(tasks)} no total" if len(visible) != len(tasks) else "")
+            if tasks else ""
+        )
+        page.update()
+
+    def on_filter_change(e=None):
+        # guarda as escolhas (exceto a busca por título, que é momentânea)
+        config.gui.tasks_sort = filter_sort.value or "created_desc"
+        config.gui.tasks_status_filter = filter_status.value or STATUS_ALL
+        config.gui.tasks_limit = int(filter_limit.value or 0)
+        persist()
+        render_tasks()
+
+    filter_title.on_change = lambda e: render_tasks()
+    filter_status.on_select = on_filter_change
+    filter_sort.on_select = on_filter_change
+    filter_limit.on_select = on_filter_change
+
+    def clear_filters(e=None):
+        filter_title.value = ""
+        filter_status.value = STATUS_ALL
+        filter_sort.value = "created_desc"
+        filter_limit.value = "25"
+        on_filter_change()
 
     def show_notes_dialog(task: Task):
         try:
@@ -495,10 +629,18 @@ def main(page: ft.Page) -> None:
             options=[ft.DropdownOption(key=s, text=s) for s in config.anytype.status_options],
         )
         status_dd.on_select = make_status_change_handler(task, status_dd)
+        created_label = task.created.strftime("Criada em %d/%m/%Y %H:%M") if task.created else "Data de criação desconhecida"
         return ft.Container(
             content=ft.Row(
                 [
-                    ft.Text(task.name, expand=True, overflow=ft.TextOverflow.ELLIPSIS),
+                    ft.Column(
+                        [
+                            ft.Text(task.name, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(created_label, size=11, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
                     status_dd,
                     ft.IconButton(ft.Icons.EDIT, tooltip="Renomear", on_click=lambda e, t=task: rename_task_dialog(t)),
                     ft.IconButton(ft.Icons.EDIT_NOTE, tooltip="Observações", on_click=lambda e, t=task: show_notes_dialog(t)),
@@ -513,7 +655,10 @@ def main(page: ft.Page) -> None:
         )
 
     def refresh_tasks_list(e=None):
+        """Recarrega as tarefas do Anytype e redesenha com os filtros atuais."""
         tasks_list.controls.clear()
+        tasks_count_text.value = ""
+        state["tasks_cache"] = []
         if not config.anytype.space_id:
             tasks_list.controls.append(ft.Text("Escolha um espaço do Anytype nas Configurações primeiro."))
             page.update()
@@ -536,11 +681,8 @@ def main(page: ft.Page) -> None:
             page.update()
             return
 
-        if not tasks:
-            tasks_list.controls.append(ft.Text("(nenhuma tarefa)"))
-        for t in tasks:
-            tasks_list.controls.append(build_task_row(t))
-        page.update()
+        state["tasks_cache"] = tasks
+        render_tasks()
 
     def create_task(e):
         name = (new_task_name.value or "").strip()
@@ -560,12 +702,25 @@ def main(page: ft.Page) -> None:
         new_task_status.options = [ft.DropdownOption(key=s, text=s) for s in config.anytype.status_options]
         if not new_task_status.value and config.anytype.status_options:
             new_task_status.value = config.anytype.status_options[0]
+        refresh_status_filter_options()  # a lista de status pode ter mudado nas Configurações
         refresh_tasks_list()
         return ft.Column(
             [
                 ft.Text("Tarefas (Anytype)", size=22, weight=ft.FontWeight.BOLD),
                 ft.Row([new_task_name, new_task_status, ft.Button("Criar", icon=ft.Icons.ADD, on_click=create_task)]),
-                ft.Row([ft.Button("Atualizar lista", icon=ft.Icons.REFRESH, on_click=refresh_tasks_list)]),
+                ft.Row(
+                    [filter_title, filter_status, filter_sort, filter_limit],
+                    wrap=True,
+                    spacing=10,
+                ),
+                ft.Row(
+                    [
+                        ft.Button("Atualizar lista", icon=ft.Icons.REFRESH, on_click=refresh_tasks_list),
+                        ft.TextButton("Limpar filtros", icon=ft.Icons.FILTER_ALT_OFF, on_click=clear_filters),
+                        tasks_count_text,
+                    ],
+                    wrap=True,
+                ),
                 tasks_list,
             ],
             spacing=12,
@@ -578,7 +733,10 @@ def main(page: ft.Page) -> None:
     cycles_field = ft.TextField(
         label="Ciclos até pausa longa", value=str(config.pomodoro.cycles_before_long_break), width=200
     )
-    sound_checkbox = ft.Checkbox(label="Tocar som no início de cada fase", value=config.pomodoro.sound_enabled)
+    sound_checkbox = ft.Checkbox(
+        label=f"Tocar sons (início de cada fase e contagem regressiva nos últimos {COUNTDOWN_SECONDS} s)",
+        value=config.pomodoro.sound_enabled,
+    )
 
     def save_pomodoro_config(e):
         try:
@@ -713,6 +871,7 @@ def main(page: ft.Page) -> None:
                         ft.Button("Foco", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: play_phase_sound(Phase.WORK, force=True)),
                         ft.Button("Pausa curta", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: play_phase_sound(Phase.SHORT_BREAK, force=True)),
                         ft.Button("Pausa longa", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: play_phase_sound(Phase.LONG_BREAK, force=True)),
+                        ft.Button("Contagem regressiva", icon=ft.Icons.PLAY_ARROW, on_click=lambda e: play_countdown_demo()),
                     ],
                     wrap=True,
                 ),

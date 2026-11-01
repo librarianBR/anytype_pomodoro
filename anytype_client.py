@@ -200,8 +200,21 @@ class AnytypeClient:
     def list_objects(
         self, space_id: str, type_key: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
-        params = {"limit": limit}
-        if type_key:
-            params["type"] = type_key
-        data = self._request("GET", f"/v1/spaces/{space_id}/objects", params=params)
-        return data.get("data", data)
+        """Lista TODOS os objetos (do tipo informado, se houver), seguindo a
+        paginação da API — `limit` é só o tamanho de cada página. Sem isso,
+        espaços com mais objetos que uma página teriam tarefas "sumindo"."""
+        objects: List[Dict[str, Any]] = []
+        offset = 0
+        while True:
+            params: Dict[str, Any] = {"limit": limit, "offset": offset}
+            if type_key:
+                params["type"] = type_key
+            data = self._request("GET", f"/v1/spaces/{space_id}/objects", params=params)
+            if not isinstance(data, dict) or "data" not in data:
+                return data  # formato inesperado: devolve como veio
+            page = data.get("data") or []
+            objects.extend(page)
+            pagination = data.get("pagination") or {}
+            if not pagination.get("has_more") or not page:
+                return objects
+            offset += len(page)

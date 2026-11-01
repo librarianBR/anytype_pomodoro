@@ -33,6 +33,9 @@
   },
   "gui": {
     "mini_width": null,
-    "mini_height": null
+    "mini_height": null,
+    "tasks_sort": "created_desc",
+    "tasks_status_filter": "",
+    "tasks_limit": 25
   }
 }

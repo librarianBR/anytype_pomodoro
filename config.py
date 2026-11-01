@@ -26,7 +26,8 @@ class PomodoroConfig:
     long_break_minutes: float = 15
     # a cada quantos ciclos de trabalho ocorre uma pausa longa
     cycles_before_long_break: int = 4
-    # toca um som (sino) no início de cada fase, nas duas interfaces
+    # toca um som (sino) no início de cada fase e uma contagem regressiva
+    # nos últimos segundos de cada fase, nas duas interfaces
     sound_enabled: bool = True
 
 
@@ -87,6 +88,13 @@ class GuiConfig:
     # — pode não funcionar em todo ambiente Linux/Wayland, é melhor esforço).
     mini_width: Optional[float] = None
     mini_height: Optional[float] = None
+    # Filtros da aba Tarefas, lembrados entre execuções:
+    # ordenação: created_desc | created_asc | name_asc | name_desc
+    tasks_sort: str = "created_desc"
+    # status: "" = todos, "__pending__" = não concluídas, ou o nome de um status
+    tasks_status_filter: str = ""
+    # quantas tarefas mostrar (0 = todas)
+    tasks_limit: int = 25
 
 
 @dataclass

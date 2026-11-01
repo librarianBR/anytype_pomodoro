@@ -74,6 +74,12 @@ SOUNDS = {
         (523.25, 0.40, 0.28, 3.0),
         (392.00, 0.55, 0.30, 2.4),
     ], gap=0.04),
+    # Contagem regressiva (5, 4, 3, 2 segundos antes do fim da fase): um
+    # "tique" curto e seco, para não competir com o sino da fase seguinte
+    "countdown_tick.wav": _note(880.00, 0.12, volume=0.28, decay=28.0),
+    # Último segundo da contagem: o mesmo tique, uma quinta acima e um
+    # pouco mais longo — sinaliza "agora vai virar"
+    "countdown_last.wav": _note(1318.51, 0.20, volume=0.30, decay=16.0),
 }
 
 

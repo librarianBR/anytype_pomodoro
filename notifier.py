@@ -1,6 +1,7 @@
 """Notificações de início/fim de fase: sempre imprime no terminal e, se a
 biblioteca 'plyer' estiver instalada, também dispara uma notificação nativa
-do sistema operacional. Também toca um som curto no início de cada fase."""
+do sistema operacional. Também toca um som curto no início de cada fase e uma contagem
+regressiva nos últimos segundos de cada fase."""
 from __future__ import annotations
 
 import datetime as _dt
@@ -32,6 +33,21 @@ def sound_path_for_phase(phase_value: str) -> str | None:
     filename = _PHASE_SOUND_FILES.get(phase_value)
     if not filename:
         return None
+    path = os.path.join(_SOUNDS_DIR, filename)
+    return path if os.path.exists(path) else None
+
+
+# Quantos segundos antes do fim de cada fase a contagem regressiva começa
+COUNTDOWN_SECONDS = 5
+
+
+def countdown_sound_path(remaining_seconds: int) -> str | None:
+    """Som da contagem regressiva para o segundo restante informado: um
+    tique de COUNTDOWN_SECONDS até 2, um tique mais agudo no 1, e None fora
+    da contagem (ou se os arquivos não existirem)."""
+    if not 1 <= remaining_seconds <= COUNTDOWN_SECONDS:
+        return None
+    filename = "countdown_last.wav" if remaining_seconds == 1 else "countdown_tick.wav"
     path = os.path.join(_SOUNDS_DIR, filename)
     return path if os.path.exists(path) else None
 

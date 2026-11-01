@@ -41,6 +41,9 @@ class Task:
     name: str
     status: str
     raw: Dict[str, Any]
+    # Data de criação (propriedade nativa "created_date" do Anytype), no
+    # fuso local; None se a sua versão do Anytype não a devolver.
+    created: Optional[_dt.datetime] = None
 
 
 class TaskManager:
@@ -163,7 +166,30 @@ class TaskManager:
                     if isinstance(raw_value, dict) and raw_value.get("name"):
                         status_name = raw_value["name"]
             break
-        return Task(id=obj.get("id"), name=obj.get("name", ""), status=status_name, raw=obj)
+        return Task(
+            id=obj.get("id"),
+            name=obj.get("name", ""),
+            status=status_name,
+            raw=obj,
+            created=self._extract_created_date(obj),
+        )
+
+    @staticmethod
+    def _extract_created_date(obj: Dict[str, Any]) -> Optional[_dt.datetime]:
+        """Lê a propriedade nativa "created_date" (ex.: "2026-06-12T18:35:57Z")
+        e converte para o fuso local. Tolerante: None se não existir ou vier
+        num formato inesperado."""
+        for prop in obj.get("properties", []):
+            if prop.get("key") != "created_date":
+                continue
+            value = prop.get("date")
+            if not value:
+                return None
+            try:
+                return _dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+            except (ValueError, AttributeError):
+                return None
+        return None
 
     # ---------------------------------------------------------------- CRUD
     def create_task(self, name: str, description: str = "", status: Optional[str] = None) -> Task:

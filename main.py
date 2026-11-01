@@ -17,7 +17,7 @@ import sys
 
 from anytype_client import AnytypeClient, AnytypeError
 from config import AppConfig, load_config, save_config
-from notifier import notify, play_sound, sound_path_for_phase
+from notifier import countdown_sound_path, notify, play_sound, sound_path_for_phase
 from pomodoro_timer import Phase, PomodoroTimer
 from task_manager import SetupError, TaskManager
 
@@ -248,7 +248,7 @@ class App:
         raw = input(f"Ciclos até pausa longa [{p.cycles_before_long_break}]: ").strip()
         if raw:
             p.cycles_before_long_break = int(raw)
-        raw = input(f"Tocar som no início de cada fase? (s/n) [{'s' if p.sound_enabled else 'n'}]: ").strip().lower()
+        raw = input(f"Tocar sons (início de fase e contagem regressiva)? (s/n) [{'s' if p.sound_enabled else 'n'}]: ").strip().lower()
         if raw in ("s", "n"):
             p.sound_enabled = raw == "s"
         self.save()
@@ -288,8 +288,17 @@ class App:
                         self.current_task_id, self.config.anytype.done_status_name
                     )
                     print(f"Tarefa marcada como {self.config.anytype.done_status_name}.")
+                    # Tarefa concluída sai da sessão; use 'vincular' para
+                    # escolher a próxima.
+                    self.current_task_id = None
+                    print("Tarefa desvinculada da sessão. Use 'vincular' para escolher a próxima.")
                 except AnytypeError as e:
                     print(f"Não consegui atualizar a tarefa: {e}")
+
+    def _on_tick(self, status):
+        # Contagem regressiva sonora nos últimos segundos de cada fase
+        if self.config.pomodoro.sound_enabled:
+            play_sound(countdown_sound_path(status.remaining_seconds))
 
     def _link_task(self, new_task_id: str | None):
         """Vincula, troca ou desvincula a tarefa da sessão a qualquer
@@ -324,6 +333,7 @@ class App:
             self.config.pomodoro,
             on_phase_start=self._on_phase_start,
             on_phase_end=self._on_phase_end,
+            on_tick=self._on_tick,
         )
         self.timer.start()
         print(

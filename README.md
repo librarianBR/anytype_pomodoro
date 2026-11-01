@@ -20,7 +20,8 @@ com tempos configuráveis e integra a lista de tarefas com o **Anytype**
 - **Integração das duas coisas**: ao iniciar uma sessão Pomodoro você pode
   vincular a uma tarefa; ela é automaticamente marcada como "In Progress", e ao
   final de um ciclo de foco a aplicação pergunta se quer marcá-la como
-  "Done".
+  "Done" (se sim, ela é desvinculada e a sessão fica pronta para a
+  próxima tarefa).
 
 ## Instalação
 
@@ -83,14 +84,39 @@ bruto" em cada tarefa para depuração) e **Configurações** (tempos do
 Pomodoro, sons, pareamento com o Anytype, escolha de espaço, nomes de
 tipo/propriedade e lista de status).
 
-### Sons de início de fase
+### Filtros na aba Tarefas
+
+Acima da lista de tarefas há controles para escolher o que ver:
+- **Buscar no título** — filtra enquanto você digita, sem diferenciar
+  maiúsculas/minúsculas nem acentos ("linguistica" acha "Linguística");
+- **Status** — Todos, Não concluídas (tudo que não está com o status de
+  concluído, `done_status_name`) ou um status específico;
+- **Ordenar por** — data de criação (mais recentes ou mais antigas
+  primeiro) ou título (A → Z ou Z → A);
+- **Mostrar** — 10, 25, 50, 100 ou todas; o contador ao lado diz quantas
+  estão sendo mostradas de quantas correspondem aos filtros.
+
+Cada tarefa mostra a data em que foi criada no Anytype. Os filtros são
+aplicados sobre a lista já carregada (não consultam o Anytype a cada
+clique — use "Atualizar lista" para buscar mudanças feitas direto no
+Anytype). Ordenação, status e quantidade ficam salvos em `config.json`;
+"Limpar filtros" volta ao padrão.
+
+### Sons de início de fase e contagem regressiva
 
 Cada fase (foco, pausa curta, pausa longa) tem um som diferente — três
 sinos curtos e suaves, sintetizados localmente (sem depender de nenhum
-arquivo de áudio baixado da internet), em `assets/*.wav`. Dá pra ligar ou
-desligar em Configurações → "Tocar som no início de cada fase", e testar
-cada um sem esperar um ciclo inteiro com os botões "Testar sons". Se quiser
-trocar o timbre, edite e rode `python generate_sounds.py` de novo.
+arquivo de áudio baixado da internet), em `assets/*.wav`.
+
+Nos **últimos 5 segundos** de qualquer fase toca uma contagem regressiva:
+um tique curto aos 5, 4, 3 e 2 segundos e um tique mais agudo no último
+segundo, logo antes do sino da fase seguinte. A contagem acompanha o timer
+de verdade — se você pausar no meio dela, ela pausa junto.
+
+Dá pra ligar ou desligar todos os sons em Configurações → "Tocar sons", e
+testar cada um sem esperar um ciclo inteiro com os botões "Testar sons"
+(inclusive "Contagem regressiva"). Se quiser trocar o timbre, edite e rode
+`python generate_sounds.py` de novo.
 
 Tanto a CLI quanto a GUI tocam o som chamando o tocador de áudio que já
 existir no seu sistema operacional (`paplay`/`aplay`/`ffplay` no Linux,
@@ -145,6 +171,11 @@ estão com o status de "concluído" (`done_status_name`).
 Parar a sessão (botão "Parar") não desfaz o vínculo — isso é intencional,
 para você poder apertar "Iniciar" de novo sem precisar reselecionar a
 mesma tarefa.
+
+Já ao responder **"Sim"** no aviso "Ciclo de foco terminado" (marcar a
+tarefa como concluída), a tarefa é desvinculada: o dropdown volta vazio,
+sem ela na lista, esperando você escolher a próxima. Respondendo "Agora
+não", o vínculo continua como estava.
 
 ### Observações nas tarefas
 
