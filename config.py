@@ -102,6 +102,10 @@ class GuiConfig:
     tasks_status_filter: str = ""
     # quantas tarefas mostrar (0 = todas)
     tasks_limit: int = 25
+    # Aparência: paleta de cores (chave de gui.THEMES) e modo claro/escuro
+    # ("system" segue o sistema operacional, "light" ou "dark")
+    theme: str = "tomate"
+    theme_mode: str = "system"
 
 
 @dataclass

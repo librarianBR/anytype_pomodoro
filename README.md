@@ -1,104 +1,132 @@
 # Pomodoro + Anytype
 
-Aplicação de linha de comando em Python que implementa a técnica Pomodoro
-com tempos configuráveis e integra a lista de tarefas com o **Anytype**
-(usando a API local dele como "banco de dados").
+Um timer **Pomodoro** com a sua lista de tarefas guardada no **Anytype**.
+Você escolhe a tarefa, foca nos ciclos de trabalho e pausa, e o andamento
+fica registrado na própria tarefa: status, histórico de sessões e
+observações, tudo dentro do Anytype.
 
-## O que a aplicação faz
+Tudo roda no seu computador: a aplicação conversa com o Anytype Desktop
+pela API local dele, sem servidores externos nem conta em outro serviço.
 
-- **Timer Pomodoro configurável**: tempo de foco, pausa curta, pausa longa e
-  quantos ciclos de foco acontecem antes de uma pausa longa.
-- **Você sempre sabe o que está acontecendo**: a qualquer momento (comando
-  `status`) mostra a fase atual (foco / pausa curta / pausa longa), o ciclo
-  em andamento e quantos minutos/segundos faltam. Início e fim de cada fase
-  disparam uma notificação (terminal + notificação nativa do sistema
-  operacional), e os últimos 5 segundos de cada fase têm uma contagem
-  regressiva sonora.
-- **Tarefas no Anytype**: criar, renomear, excluir e mudar o status
-  (padrão: To Do / In Progress / Done) de tarefas, usando a API
-  local do Anytype Desktop — sem precisar de nenhum servidor externo, tudo
-  roda no seu computador.
-- **Integração das duas coisas**: ao iniciar uma sessão Pomodoro você pode
-  vincular a uma tarefa; ela é automaticamente marcada como "In Progress", e ao
-  final de um ciclo de foco a aplicação pergunta se quer marcá-la como
-  "Done" (se sim, ela é desvinculada e a sessão fica pronta para a
-  próxima tarefa).
+## Benefícios
+
+- **Foco com ritmo**: ciclos de foco, pausas curtas e pausas longas com os
+  tempos que você escolher.
+- **Você sempre sabe em que fase está**: contagem na tela, notificação do
+  sistema no início e no fim de cada fase, um som diferente para cada fase
+  e uma contagem regressiva sonora nos últimos 5 segundos.
+- **Tarefas organizadas no Anytype**: crie, renomeie, exclua e mude o status
+  das tarefas sem sair da aplicação. Tudo continua disponível no Anytype,
+  em qualquer dispositivo sincronizado.
+- **Histórico automático**: cada sessão de foco, cada vínculo e cada
+  conclusão fica registrada na tarefa, com data e hora.
+- **Backlog no estilo Scrum**: data de entrega e história de usuário ("Como…,
+  quero…, para…") já na criação da tarefa, com um modelo pronto.
+- **Encontre o que precisa**: busca por título, filtro por status,
+  ordenação por criação, título ou entrega, e aviso de tarefas atrasadas.
+- **Modo mini**: uma janela pequena, sempre por cima das outras, só com o
+  tempo restante.
+- **Do seu jeito**: sete paletas de cores e modo claro, escuro ou
+  automático.
+- **Privacidade**: seus dados não saem do seu computador (além da
+  sincronização normal do próprio Anytype).
+
+## Requisitos
+
+- **Anytype Desktop** instalado e **aberto** enquanto você usa a aplicação.
+- **Python 3.14** ou mais recente.
+- Linux, Windows ou macOS.
+- Recomendado: o gerenciador [uv](https://docs.astral.sh/uv/), que instala
+  tudo com um comando.
 
 ## Instalação
 
+### Com uv (recomendado)
+
 ```bash
+git clone https://github.com/librarianBR/anytype_pomodoro.git
 cd anytype_pomodoro
+uv sync
+```
+
+### Com pip
+
+```bash
+git clone https://github.com/librarianBR/anytype_pomodoro.git
+cd anytype_pomodoro
+python -m venv .venv
+source .venv/bin/activate        # no Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-(Notificações nativas: no Linux a aplicação usa o `notify-send`, que já vem
-com GNOME, KDE, XFCE etc. — se faltar, instale o pacote `libnotify-bin`. No
-Windows e no macOS usa o `plyer`, que é opcional — sem ele, as notificações
-aparecem só no terminal.)
+## Preparar o Anytype (uma vez só)
 
-## Pré-requisitos no Anytype
+No espaço do Anytype onde vão ficar as tarefas, confira se existem:
 
-1. Tenha o **Anytype Desktop** instalado e aberto (a API roda embutida nele,
-   em `http://localhost:31009` por padrão, totalmente offline).
-2. No espaço (space) onde você quer guardar as tarefas, garanta que existem:
-   - um **tipo de objeto** para tarefas (por padrão a aplicação procura um
-     chamado `Task`; se você usa outro nome, ex. `Tarefa`, ajuste
-     `task_type_name` no `config.json` depois da primeira execução);
-   - uma **propriedade do tipo "Select"** chamada `Status` (também
-     configurável via `status_property_name`), com as opções que quiser —
-     a aplicação cria automaticamente as tags que faltarem, com os nomes
-     definidos em `status_options` (padrão: `To Do`, `In Progress`,
-     `Done`). Quais desses nomes contam como "em andamento" e "concluído"
-     são configuráveis separadamente (`in_progress_status_name` e
-     `done_status_name`);
-   - **(opcional, recomendado)** uma **propriedade do tipo "Text"** chamada
-     `Notes` (configurável via `notes_property_name`) — é onde o histórico
-     de observações de cada tarefa é guardado. Sem ela, tudo funciona
-     normalmente, só a função de observações fica indisponível (com uma
-     mensagem de erro clara explicando o que falta).
+1. **Um tipo de objeto para tarefas.** O tipo `Task`, que já vem com o
+   Anytype, serve. Se você usa outro nome (por exemplo `Tarefa`), informe-o
+   depois em Configurações.
+2. **Uma propriedade do tipo "Select" chamada `Status`**, adicionada a esse
+   tipo. As opções (`To Do`, `In Progress`, `Done`) são criadas pela
+   aplicação automaticamente, se faltarem.
+3. **(Recomendado) Uma propriedade do tipo "Text" chamada `Notes`**,
+   adicionada ao tipo. É onde fica o histórico de cada tarefa. Sem ela tudo
+   funciona, menos as observações.
 
-   Isso é necessário porque criar Tipos e Propriedades novos por API ainda
-   é uma funcionalidade instável/limitada em várias versões do Anytype — é
-   mais confiável criar esse "esqueleto" manualmente uma vez, direto no app.
+A data de entrega (`Due date`) e a descrição já existem no tipo `Task` do
+Anytype: não é preciso criar nada para elas.
 
-3. Se o seu tipo `Task` usa o layout nativo "Action" do Anytype (o que dá
-   aquele checkbox ao lado do título), ele tem uma propriedade `Done`
-   (checkbox) própria do Anytype que **não é sincronizada automaticamente**
-   com o "Status" — são duas coisas independentes por padrão no próprio
-   Anytype. Esta aplicação tenta manter as duas alinhadas sozinha (marca/
-   desmarca esse checkbox junto com o Status), em modo "melhor esforço": se
-   a propriedade não existir na sua instalação, simplesmente não sincroniza
-   nada, sem dar erro.
+## Primeiro uso
 
-## Uso
+1. Abra o Anytype Desktop.
+2. Inicie a aplicação:
+   ```bash
+   uv run gui.py      # ou, com pip: python gui.py
+   ```
+3. Vá em **Configurações** e clique em **"Parear com o Anytype"**. O
+   Anytype mostra um código de 4 dígitos; digite-o na aplicação. Isso só é
+   feito uma vez: a chave fica salva no seu computador.
+4. Clique em **"Carregar espaços"** e escolha o espaço das tarefas.
+5. Clique em **"Testar / preparar"**. A aplicação confere o tipo e as
+   propriedades e avisa exatamente o que estiver faltando.
+6. Ajuste os tempos do Pomodoro, se quiser, e clique em **"Salvar tempos"**.
 
-Há duas interfaces disponíveis, usando exatamente a mesma lógica por baixo:
+Pronto. Nas próximas vezes, é só abrir e usar.
 
-### Interface gráfica (recomendada) — Flet
+## Como usar
 
-```bash
-uv add flet   # se ainda não tiver instalado
-uv run gui.py
-```
+A janela tem três seções, escolhidas pelos botões no topo, mais o modo mini.
 
-Abre uma janela com três seções (botões no topo): **Pomodoro** (timer com
-início/pausa/retomar/reiniciar/pular/parar e vínculo opcional a uma tarefa),
-**Tarefas** (criar/renomear/excluir/mudar status, com um botão "Ver JSON
-bruto" em cada tarefa para depuração) e **Configurações** (tempos do
-Pomodoro, sons, pareamento com o Anytype, escolha de espaço, nomes de
-tipo/propriedade e lista de status).
+### Pomodoro
 
-### Criar tarefas: data de entrega e história de usuário
+- **Iniciar / Pausar / Retomar / Parar**: controlam a sessão.
+- **Reiniciar fase**: volta a contagem da fase atual para o início, sem
+  mudar de ciclo.
+- **Pular fase**: encerra a fase atual e passa para a próxima.
+- **Vincular a uma tarefa**: escolha a tarefa em que vai trabalhar. Ela
+  passa para "In Progress", e a lista mostra só tarefas ainda não
+  concluídas. Dá para vincular ou trocar a qualquer momento, com o timer
+  rodando ou não; a troca fica registrada no histórico das duas tarefas.
+- **Concluir tarefa**: marca a tarefa vinculada como "Done" na hora, com uma
+  observação opcional, e a tira da sessão para você escolher a próxima. O
+  timer continua normalmente.
+- **Desvincular**: só tira o vínculo. A tarefa continua com o status que
+  tinha.
+- **Fim do ciclo de foco**: se houver tarefa vinculada, o timer espera e
+  pergunta se a tarefa foi concluída, com um campo para observação. A sessão
+  de foco fica registrada no histórico de qualquer forma.
+- **Parar** não desfaz o vínculo: aperte "Iniciar" de novo e continue na
+  mesma tarefa.
 
-Além do nome e do status inicial, cada tarefa nova pode ter:
-- **Data de entrega** — botão "Data de entrega" (abre um calendário); fica
-  gravada na propriedade nativa `Due date` do Anytype (já existe no tipo
-  Task embutido; configurável via `due_date_property_key`). Na lista, cada
-  tarefa mostra a entrega, com o aviso **(atrasada)** em vermelho se a data
-  já passou e ela não está concluída, e dá pra ordenar por "Entrega: mais
-  próxima primeiro".
-- **História de usuário (Scrum)** — campo de texto livre; o botão "Usar
-  modelo de história" preenche o formato clássico de backlog:
+### Tarefas
+
+**Criar uma tarefa:**
+
+- **Nome** e **Status inicial**.
+- **Data de entrega** (opcional): clique no botão e escolha no calendário.
+  O ✕ ao lado remove a data.
+- **História de usuário** (opcional): texto livre. O botão **"Usar modelo
+  de história"** preenche o formato usado em backlogs Scrum:
 
   ```
   Como <tipo de usuário>, quero <objetivo> para <benefício>.
@@ -107,246 +135,108 @@ Além do nome e do status inicial, cada tarefa nova pode ter:
   - Dado <contexto>, quando <ação>, então <resultado esperado>.
   ```
 
-  É só substituir os campos entre `< >` (a aplicação avisa se algum ficar
-  sem preencher). A história é gravada na **descrição** da tarefa no
-  Anytype (propriedade nativa `Description`, configurável via
-  `description_property_key`), que aparece logo abaixo do título lá; na
-  lista daqui aparece a primeira linha (passe o mouse para ver tudo).
+  Troque os campos entre `< >` pelo seu texto; a aplicação avisa se algum
+  ficar sem preencher. A história aparece na descrição da tarefa no Anytype.
 
-Na CLI, a criação de tarefa pergunta a data de entrega (`dd/mm/aaaa`) e
-oferece montar a história com as perguntas "Como…", "quero…", "para…" e os
-critérios de aceitação.
+**Encontrar tarefas:**
 
-### Filtros na aba Tarefas
+- **Buscar no título**: filtra enquanto você digita, sem diferenciar
+  maiúsculas nem acentos ("linguistica" encontra "Linguística").
+- **Status**: Todos, Não concluídas ou um status específico.
+- **Ordenar por**: criação (mais recentes ou mais antigas primeiro), título
+  (A → Z ou Z → A) ou entrega (mais próxima primeiro).
+- **Mostrar**: 10, 25, 50, 100 ou todas.
+- **Limpar filtros** volta ao padrão. A aplicação lembra suas escolhas na
+  próxima vez.
 
-Acima da lista de tarefas há controles para escolher o que ver:
-- **Buscar no título** — filtra enquanto você digita, sem diferenciar
-  maiúsculas/minúsculas nem acentos ("linguistica" acha "Linguística");
-- **Status** — Todos, Não concluídas (tudo que não está com o status de
-  concluído, `done_status_name`) ou um status específico;
-- **Ordenar por** — data de criação (mais recentes ou mais antigas
-  primeiro), título (A → Z ou Z → A) ou data de entrega (mais próxima
-  primeiro; tarefas sem entrega vão para o fim);
-- **Mostrar** — 10, 25, 50, 100 ou todas; o contador ao lado diz quantas
-  estão sendo mostradas de quantas correspondem aos filtros.
+**Em cada tarefa** você vê a data de criação, a entrega (com
+**(atrasada)** em vermelho se o prazo passou e ela não foi concluída) e a
+primeira linha da história; passe o mouse sobre ela para ler tudo. Os
+botões ao lado servem para mudar o status, renomear, ver e adicionar
+**observações** (📝), excluir e ver os dados brutos da tarefa.
 
-Cada tarefa mostra a data em que foi criada no Anytype. Os filtros são
-aplicados sobre a lista já carregada (não consultam o Anytype a cada
-clique — use "Atualizar lista" para buscar mudanças feitas direto no
-Anytype). Ordenação, status e quantidade ficam salvos em `config.json`;
-"Limpar filtros" volta ao padrão.
+Mudou algo direto no Anytype? Clique em **"Atualizar lista"**.
 
-### Sons de início de fase e contagem regressiva
+### Configurações
 
-Cada fase (foco, pausa curta, pausa longa) tem um som diferente — três
-sinos curtos e suaves, sintetizados localmente (sem depender de nenhum
-arquivo de áudio baixado da internet), em `assets/*.wav`.
-
-Nos **últimos 5 segundos** de qualquer fase toca uma contagem regressiva:
-um tique curto aos 5, 4, 3 e 2 segundos e um tique mais agudo no último
-segundo, logo antes do sino da fase seguinte. A contagem acompanha o timer
-de verdade — se você pausar no meio dela, ela pausa junto.
-
-Dá pra ligar ou desligar todos os sons em Configurações → "Tocar sons", e
-testar cada um sem esperar um ciclo inteiro com os botões "Testar sons"
-(inclusive "Contagem regressiva"). Se quiser trocar o timbre, edite e rode
-`python generate_sounds.py` de novo.
-
-Tanto a CLI quanto a GUI tocam o som chamando o tocador de áudio que já
-existir no seu sistema operacional (`paplay`/`aplay`/`ffplay` no Linux,
-`afplay` no macOS, nativo no Windows) via `notifier.play_sound()` —
-propositalmente não usamos o controle `Audio` do Flet, pois ele se mostrou
-inconsistente entre versões/plataformas do cliente desktop (em algumas
-instalações no Linux aparece como "Unknown control: Audio" mesmo com todas
-as bibliotecas corretas instaladas). Se nenhum tocador for encontrado no
-seu sistema, a aplicação simplesmente não emite som — sem travar nem gerar
-erro.
+- **Aparência**: escolha a paleta de cores (Tomate, Pêssego, Girassol,
+  Menta, Oceano, Lavanda ou Grafite) e o modo **Claro**, **Escuro** ou
+  **Automático** (segue o sistema). A mudança vale na hora e fica salva.
+  Cada fase do Pomodoro ganha uma cor própria da paleta, para você
+  reconhecer de relance se está em foco ou em pausa.
+- **Tempos**: foco, pausa curta, pausa longa e quantos ciclos até a pausa
+  longa.
+- **Sons**: liga ou desliga todos os sons. Os botões **"Testar sons"** tocam
+  cada som, inclusive a contagem regressiva, sem esperar uma fase acabar.
+- **Conexão com o Anytype**: pareamento, escolha do espaço e os nomes do
+  tipo de tarefa, da propriedade de status e das opções de status. Se você
+  usa nomes próprios (por exemplo "A fazer / Fazendo / Feito"), informe-os
+  aqui e indique qual conta como "em andamento" e qual como "concluído".
 
 ### Modo mini
 
-O botão **"Modo mini"** deixa a janela sempre por cima das outras (mesmo
-trocando de app) e mostra só o ícone da fase e a contagem regressiva. Como
-redimensionar a janela programaticamente é um
-[bug conhecido e ainda aberto do próprio Flet](https://github.com/flet-dev/flet/issues/5988)
-em sessões Wayland nativas do Linux (a maioria das instalações recentes de
-Ubuntu/GNOME) — o pedido de novo tamanho é ignorado pelo motor gráfico
-enquanto o app já está rodando —, a janela continua com tamanho livre: é só
-arrastar a borda para deixá-la pequena manualmente (isso funciona porque é
-o próprio gerenciador de janelas do sistema cuidando do redimensionamento,
-não o Flet). O botão "Restaurar" volta ao normal.
+O botão **"Modo mini"** deixa a janela sempre por cima das outras, mostrando
+só a fase e o tempo restante. Arraste a borda para deixá-la do tamanho que
+quiser: a aplicação lembra esse tamanho. **"Restaurar"** volta ao normal.
 
-O tamanho que você deixar é lembrado (salvo em `config.json`) e a
-aplicação tenta reaplicá-lo automaticamente da próxima vez que você clicar
-em "Modo mini" — isso é "melhor esforço": como reaplicar tamanho de janela
-em tempo de execução é justamente a operação afetada pelo bug acima, pode
-não colar dependendo do seu ambiente. Nesse caso, é só arrastar a borda de
-novo (o tamanho novo será lembrado igual).
+### Linha de comando (alternativa)
 
-Se preferir tentar o redimensionamento automático mesmo assim, rodar sob
-X11/XWayland em vez de Wayland nativo pode ajudar (o problema não ocorre
-lá, segundo o relato do bug):
-```bash
-GDK_BACKEND=x11 uv run gui.py
-```
+Prefere o terminal? `uv run main.py` (ou `python main.py`) oferece as mesmas
+funções por menus. Durante a sessão, digite: `status`, `pausar`, `retomar`,
+`reiniciar`, `pular`, `vincular`, `desvincular`, `concluir` ou `parar`.
 
-### Vincular tarefa a qualquer momento
+## Limitações
 
-O dropdown "Vincular a uma tarefa" na sessão Pomodoro fica disponível o
-tempo todo — rodando ou não — e trocar a seleção tem efeito imediato: a
-tarefa escolhida é marcada como "em andamento" (`in_progress_status_name`)
-e ganha uma observação "Sessão vinculada a esta tarefa." no histórico. Um
-botão **"Desvincular"** remove o vínculo a qualquer momento. Isso permite
-trocar de tarefa no meio de uma sessão (por exemplo, se você terminar uma
-tarefa antes do tempo do ciclo acabar): tanto a tarefa que está sendo
-deixada quanto a nova recebem uma observação registrando a troca, com data
-e hora — nada fica perdido. O dropdown só lista tarefas que ainda não
-estão com o status de "concluído" (`done_status_name`).
+- **O Anytype Desktop precisa estar aberto.** A aplicação usa a API local
+  dele; não funciona só com o Anytype do celular ou da web.
+- **Um espaço por vez.** As tarefas vêm do espaço escolhido em
+  Configurações.
+- **O tipo de tarefa e as propriedades `Status` e `Notes` são criados à
+  mão**, uma vez, no Anytype. A API do Anytype ainda não cria tipos e
+  propriedades de forma confiável.
+- **Data de entrega e história só na criação.** Para alterá-las depois,
+  edite a tarefa direto no Anytype.
+- **O histórico fica na propriedade `Notes`**, não no corpo da página da
+  tarefa: a API do Anytype ainda não edita o corpo de forma confiável.
+- **A lista não se atualiza sozinha.** Mudanças feitas no Anytype aparecem
+  ao clicar em "Atualizar lista".
+- **A API do Anytype é nova e muda com frequência.** Uma atualização do
+  Anytype pode exigir uma atualização desta aplicação.
+- **Modo mini no Linux com Wayland**: o redimensionamento automático da
+  janela pode não funcionar (limitação do Flet, a biblioteca de interface).
+  Arraste a borda manualmente, ou inicie com
+  `GDK_BACKEND=x11 uv run gui.py`.
+- **Sons** dependem de um tocador de áudio do sistema (`paplay`, `aplay`
+  ou `ffplay` no Linux; já incluído no Windows e no macOS). Sem ele, a
+  aplicação funciona normalmente, só que sem som.
+- **Interface em português.** Os nomes de status padrão estão em inglês
+  (como no Anytype), mas podem ser trocados em Configurações.
 
-Parar a sessão (botão "Parar") não desfaz o vínculo — isso é intencional,
-para você poder apertar "Iniciar" de novo sem precisar reselecionar a
-mesma tarefa.
+## Solução de problemas
 
-### Concluir a tarefa
+| Problema | O que fazer |
+|---|---|
+| Erro de conexão com o Anytype | Confira se o Anytype Desktop está aberto. Se acabou de atualizá-lo, faça o pareamento de novo em Configurações. |
+| "Configuração incompleta" na aba Tarefas | Clique em "Testar / preparar" em Configurações: a mensagem diz o que falta no Anytype (tipo, propriedade `Status` etc.). |
+| Status aparece como `?` | Confira o nome da propriedade e das opções de status em Configurações. Se persistir, use "Ver JSON bruto" na tarefa e abra uma *issue* com o conteúdo. |
+| Observações não funcionam | Crie a propriedade de texto `Notes` e adicione-a ao tipo de tarefa no Anytype. |
+| Sem notificações no Linux | Instale o pacote `libnotify-bin` (que fornece o `notify-send`) e confira se o modo "não perturbe" está desligado. |
+| Sem som | Confira a opção de sons em Configurações e se existe `paplay`, `aplay` ou `ffplay` no sistema. |
 
-Há duas formas de marcar a tarefa vinculada como concluída
-(`done_status_name`):
-- **A qualquer momento**, pelo botão **"Concluir tarefa"** (ao lado de
-  "Desvincular") — por exemplo, se você terminou antes de o ciclo de foco
-  acabar. Pede confirmação, aceita uma observação opcional e registra no
-  histórico "Tarefa concluída" (com o ciclo e os minutos de foco nele, se
-  um ciclo de foco estiver rodando). O timer continua normalmente.
-- **No fim de um ciclo de foco**, respondendo **"Sim"** no aviso "Ciclo de
-  foco terminado".
+Encontrou um problema ou tem uma sugestão? Abra uma *issue* em
+<https://github.com/librarianBR/anytype_pomodoro/issues>.
 
-Nos dois casos a tarefa é desvinculada: o dropdown volta vazio, sem ela na
-lista, esperando você escolher a próxima. Já o botão **"Desvincular"** só
-tira o vínculo — a tarefa continua com o status que tinha. Os dois botões
-ficam desabilitados enquanto não houver tarefa vinculada. Na CLI, o
-comando equivalente é `concluir`.
+## Privacidade
 
-### Observações nas tarefas
+A chave de acesso ao Anytype e suas preferências ficam no arquivo
+`config.json`, só no seu computador (ele não é enviado ao repositório).
+Não compartilhe esse arquivo.
 
-Cada tarefa pode acumular um histórico de observações, guardado numa
-propriedade de texto customizada chamada `Notes` (veja
-"Pré-requisitos no Anytype" acima) — nada se perde, cada nota nova é
-acrescentada embaixo das anteriores, com data e hora. Isso acontece de
-várias formas:
-- **Automaticamente**: ao terminar um ciclo de foco vinculado a uma tarefa,
-  a aplicação registra "Sessão de foco concluída (X min)" e oferece um
-  campo opcional para você escrever algo a mais antes de confirmar (o
-  timer fica pausado automaticamente enquanto essa pergunta está na tela,
-  então a próxima fase não perde tempo esperando sua resposta);
-- **Automaticamente**: ao vincular, trocar ou desvincular uma tarefa da
-  sessão (veja a seção acima);
-- **A qualquer momento**: pelo ícone de observações (📝) em cada tarefa na
-  aba Tarefas, que mostra o histórico e permite adicionar uma nova nota.
+## Para desenvolvedores
 
-Por que uma propriedade de texto, e não o corpo/conteúdo da página (a
-seção "Details" que aparece dentro de cada tarefa no Anytype)? Porque
-atualizar o `body` de um objeto via API não é confiável nesta versão do
-Anytype — é uma limitação conhecida da própria API (a comunidade recomenda
-até recriar o objeto do zero para contornar isso, o que mudaria o id da
-tarefa a cada nota; inviável aqui, já que dependemos do id permanecer
-estável). Guardar num campo/propriedade dedicado é o caminho confiável.
+Estrutura do código, detalhes da integração com a API do Anytype e como
+gerar um executável: veja [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).
 
-### Linha de comando
+## Licença
 
-```bash
-python main.py
-```
-
-
-No primeiro uso (em qualquer uma das duas interfaces), você vai precisar:
-
-1. **Parear com o Anytype**: a aplicação pede pro Anytype um código de 4
-   dígitos (que aparece na tela do Anytype Desktop) — digite o código
-   quando solicitado. A chave de acesso gerada fica salva em `config.json`,
-   então isso só precisa ser feito uma vez.
-2. **Escolher espaço do Anytype**: seleciona em qual space as tarefas vão
-   ser criadas/lidas.
-3. Gerenciar tarefas: criar/editar/excluir e mudar status livremente, sem
-   precisar rodar um pomodoro.
-4. Configurar tempos do Pomodoro: ajustar foco/pausas/ciclos.
-5. Iniciar uma sessão Pomodoro. Na CLI, comandos disponíveis durante a
-   sessão: `status`, `pausar`, `retomar`, `reiniciar`, `pular`, `vincular`,
-   `desvincular`, `concluir`, `parar`. Na interface gráfica, os mesmos controles
-   aparecem como botões (`Reiniciar fase` volta a contagem da fase atual
-   para o início, sem avançar de ciclo; vincular/desvincular tarefa
-   funciona a qualquer momento, veja a seção correspondente abaixo).
-
-Tudo fica salvo em `config.json` (tempos, espaço escolhido, chave de API,
-ids de tipo/propriedade/tags já descobertos) — não é preciso reconfigurar
-nada nas próximas execuções.
-
-## Sobre a integração com o Anytype
-
-A API Local do Anytype é relativamente nova e muda com alguma frequência.
-Este projeto usa a versão de API `2025-11-08` (configurável em
-`config.json`, campo `anytype.api_version`) e segue o formato documentado
-em https://developers.anytype.io/docs/reference. Se uma chamada falhar por
-causa de alguma mudança de schema entre versões, o erro impresso já traz o
-corpo de resposta da API — normalmente dá pra ver ali o campo que mudou de
-nome e ajustar em `anytype_client.py`.
-
-O reconhecimento do status de cada tarefa (`task_manager.py`, método
-`_to_task`) foi escrito de forma tolerante a algumas variações conhecidas
-de formato (a propriedade pode ser referenciada por `id` ou por `key`, e o
-valor de uma propriedade "select" pode vir como string simples ou como um
-objeto `{"id":..., "name":...}`). Se, mesmo assim, o status aparecer como
-`?` na lista de tarefas, use o botão **"Ver JSON bruto"** de qualquer
-tarefa (na aba Tarefas da interface gráfica) para ver exatamente o que a
-sua instalação do Anytype está devolvendo, e ajustar `_to_task` de acordo.
-
-
-## Estrutura dos arquivos
-
-- `pomodoro_timer.py` — núcleo do timer (roda em thread própria, sem
-  nenhuma dependência do Anytype; pode ser reaproveitado em outra interface).
-- `anytype_client.py` — cliente HTTP puro para a API local do Anytype
-  (autenticação, tipos, propriedades, tags, objetos).
-- `task_manager.py` — regras de negócio de "tarefa com status" em cima do
-  cliente do Anytype.
-- `config.py` — modelo de configuração e leitura/escrita do `config.json`.
-- `paths.py` — resolve onde ficam o `config.json` e os arquivos de som,
-  funcionando tanto rodando com `python` normal quanto empacotado num
-  `.exe` pelo PyInstaller (veja "Gerando um .exe" abaixo).
-- `notifier.py` — notificação em terminal + notificação nativa opcional.
-- `main.py` — menu interativo (CLI) que une tudo.
-- `gui.py` — interface gráfica (Flet) que une tudo, incluindo sons e modo mini.
-- `generate_sounds.py` — sintetiza os sons de início de fase (`assets/*.wav`).
-- `pomodoro.spec` — receita pronta do PyInstaller pra gerar um `.exe`.
-
-## Gerando um .exe (Windows) com PyInstaller
-
-Rodar `pyinstaller gui.py` direto tem dois problemas: o executável não
-inclui a pasta `assets/` (os sons) e, em modo `--onefile`, o Python enxerga
-o próprio código rodando dentro de uma pasta temporária diferente a cada
-execução — o que fazia o `config.json` "sumir" toda vez que o programa
-fechava (por isso pedia pra parear com o Anytype de novo a cada sessão).
-Isso já está corrigido no código (`paths.py` trata os dois casos
-corretamente), mas o PyInstaller ainda precisa ser instruído a incluir a
-pasta `assets/` explicitamente — ele não faz isso sozinho.
-
-A forma mais simples é usar a receita pronta:
-```bash
-pip install pyinstaller
-pyinstaller pomodoro.spec
-```
-O executável final fica em `dist/PomodoroAnytype.exe`. O `config.json` é
-criado ao lado dele na primeira execução e passa a persistir normalmente
-entre uma execução e outra.
-
-Se preferir sem o arquivo `.spec`, o comando equivalente no Windows é:
-```bash
-pyinstaller --onefile --windowed --add-data "assets;assets" --name PomodoroAnytype gui.py
-```
-(no Linux/Mac, troque o `;` por `:` em `--add-data`).
-
-**Aviso:** não tenho como gerar nem testar um `.exe` de verdade a partir
-daqui (esse ambiente é Linux, sem Windows disponível) — o `pomodoro.spec`
-foi escrito com base na documentação e nas convenções padrão do
-PyInstaller, mas não pôde ser validado rodando de fato num executável.
-Se ao rodar o `.exe` aparecer algum erro de módulo faltando (comum com
-bibliotecas como o Flet, que carregam alguns submódulos dinamicamente),
-tente adicionar `--collect-all flet` ao comando acima, e me avise o erro
-exato para eu ajustar.
+[MIT](LICENSE).

@@ -43,6 +43,33 @@ PHASE_ICONS = {
     Phase.IDLE: ft.Icons.TIMER,
 }
 
+# Cor de cada fase, em papéis do tema (não cores fixas): assim acompanham
+# a paleta escolhida e funcionam no modo claro e no escuro.
+PHASE_COLORS = {
+    Phase.WORK: ft.Colors.PRIMARY,
+    Phase.SHORT_BREAK: ft.Colors.TERTIARY,
+    Phase.LONG_BREAK: ft.Colors.SECONDARY,
+    Phase.IDLE: ft.Colors.ON_SURFACE_VARIANT,
+}
+
+# Paletas de cores (Configurações → Aparência). Cada uma é só uma cor base:
+# o Material 3 gera a partir dela um esquema completo e harmonioso (fundos,
+# botões, destaques), em versão clara e escura.
+THEMES = {
+    "tomate": ("Tomate", "#E8594A"),
+    "pessego": ("Pêssego", "#F28C5B"),
+    "girassol": ("Girassol", "#E3A008"),
+    "menta": ("Menta", "#2BAE8C"),
+    "oceano": ("Oceano", "#3A7BD5"),
+    "lavanda": ("Lavanda", "#8E7CC3"),
+    "grafite": ("Grafite", "#5F6B7A"),
+}
+THEME_MODES = {
+    "system": ("Automático", ft.ThemeMode.SYSTEM, ft.Icons.BRIGHTNESS_AUTO),
+    "light": ("Claro", ft.ThemeMode.LIGHT, ft.Icons.LIGHT_MODE),
+    "dark": ("Escuro", ft.ThemeMode.DARK, ft.Icons.DARK_MODE),
+}
+
 
 def main(page: ft.Page) -> None:
     page.title = "Pomodoro + Anytype"
@@ -65,6 +92,19 @@ def main(page: ft.Page) -> None:
         config.anytype.base_url, config.anytype.api_version, config.anytype.api_key
     )
     task_manager = TaskManager(client, config)
+
+    def apply_theme():
+        """Aplica a paleta e o modo claro/escuro salvos em config.gui."""
+        if config.gui.theme not in THEMES:
+            config.gui.theme = "tomate"
+        if config.gui.theme_mode not in THEME_MODES:
+            config.gui.theme_mode = "system"
+        seed = THEMES[config.gui.theme][1]
+        page.theme = ft.Theme(color_scheme_seed=seed, visual_density=ft.VisualDensity.COMFORTABLE)
+        page.dark_theme = ft.Theme(color_scheme_seed=seed, visual_density=ft.VisualDensity.COMFORTABLE)
+        page.theme_mode = THEME_MODES[config.gui.theme_mode][1]
+
+    apply_theme()
 
     state = {
         "timer": None,          # type: Optional[PomodoroTimer]
@@ -94,8 +134,10 @@ def main(page: ft.Page) -> None:
     def snack(message: str, error: bool = False):
         page.show_dialog(
             ft.SnackBar(
-                content=ft.Text(message),
-                bgcolor=ft.Colors.RED_400 if error else ft.Colors.GREEN_700,
+                content=ft.Text(
+                    message, color=ft.Colors.ON_ERROR if error else ft.Colors.ON_PRIMARY_CONTAINER
+                ),
+                bgcolor=ft.Colors.ERROR if error else ft.Colors.PRIMARY_CONTAINER,
                 open=True,
             )
         )
@@ -124,7 +166,9 @@ def main(page: ft.Page) -> None:
     mini_time_text = ft.Text("00:00", size=26, weight=ft.FontWeight.BOLD)
     time_text = ft.Text("00:00", size=72, weight=ft.FontWeight.BOLD)
     cycle_text = ft.Text("", size=15, color=ft.Colors.ON_SURFACE_VARIANT)
-    progress = ft.ProgressBar(value=0, width=420)
+    progress = ft.ProgressBar(
+        value=0, width=420, bar_height=8, border_radius=8, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST
+    )
     linked_task_text = ft.Text("", italic=True, size=13)
     task_dropdown = ft.Dropdown(label="Vincular a uma tarefa (opcional)", options=[], width=420)
 
@@ -296,6 +340,7 @@ def main(page: ft.Page) -> None:
             phase_icon.icon = PHASE_ICONS[phase]
             phase_text.value = PHASE_LABELS[phase]
             mini_phase_icon.icon = PHASE_ICONS[phase]
+            apply_phase_colors(phase)
             cycle_text.value = (
                 f"Ciclo {cycle} — pausa longa a cada "
                 f"{config.pomodoro.cycles_before_long_break} ciclos"
@@ -376,6 +421,15 @@ def main(page: ft.Page) -> None:
                 state["timer"].pause()
             schedule_on_ui(ask_mark_done)
 
+    def apply_phase_colors(phase: Phase):
+        """Ícone, tempo e barra de progresso na cor da fase."""
+        color = PHASE_COLORS[phase]
+        for control in (phase_icon, phase_text, mini_phase_icon, time_text, mini_time_text):
+            control.color = color
+        progress.color = color
+
+    apply_phase_colors(Phase.IDLE)
+
     def on_tick(status):
         # Contagem regressiva sonora nos últimos segundos da fase. Tocada
         # direto aqui (thread do timer), sem esperar o loop da interface,
@@ -434,6 +488,7 @@ def main(page: ft.Page) -> None:
         mini_time_text.value = "00:00"
         cycle_text.value = ""
         progress.value = 0
+        apply_phase_colors(Phase.IDLE)
         # o vínculo com a tarefa NÃO é desfeito ao parar — parar é só o
         # timer; vincular/desvincular é uma ação independente e explícita
         # (dropdown ou botão "Desvincular"), disponível a qualquer momento.
@@ -451,7 +506,7 @@ def main(page: ft.Page) -> None:
         refresh_task_dropdown()
         return ft.Column(
             [
-                ft.Text("Sessão Pomodoro", size=22, weight=ft.FontWeight.BOLD),
+                ft.Text("Sessão Pomodoro", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                 ft.Container(height=10),
                 phase_row,
                 time_text,
@@ -760,7 +815,7 @@ def main(page: ft.Page) -> None:
             content=ft.Text(f"Tem certeza que deseja excluir '{task.name}'?"),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda e: close_dialog(dlg)),
-                ft.Button("Excluir", on_click=confirm, bgcolor=ft.Colors.RED_400),
+                ft.Button("Excluir", on_click=confirm, bgcolor=ft.Colors.ERROR, color=ft.Colors.ON_ERROR),
             ],
             open=True,
         )
@@ -792,7 +847,7 @@ def main(page: ft.Page) -> None:
             info_spans.append(ft.TextSpan(f"  ·  Entrega: {task.due.strftime('%d/%m/%Y')}"))
             if overdue:
                 info_spans.append(
-                    ft.TextSpan("  (atrasada)", style=ft.TextStyle(color=ft.Colors.RED_400, weight=ft.FontWeight.BOLD))
+                    ft.TextSpan("  (atrasada)", style=ft.TextStyle(color=ft.Colors.ERROR, weight=ft.FontWeight.BOLD))
                 )
         texts = [
             ft.Text(task.name, overflow=ft.TextOverflow.ELLIPSIS),
@@ -817,9 +872,10 @@ def main(page: ft.Page) -> None:
                 ],
                 alignment=ft.MainAxisAlignment.START,
             ),
-            padding=8,
+            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
             border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
-            border_radius=8,
+            border_radius=12,
         )
 
     def refresh_tasks_list(e=None):
@@ -834,18 +890,18 @@ def main(page: ft.Page) -> None:
         try:
             task_manager.setup()
         except SetupError as ex:
-            tasks_list.controls.append(ft.Text(f"Configuração incompleta: {ex}", color=ft.Colors.RED_400))
+            tasks_list.controls.append(ft.Text(f"Configuração incompleta: {ex}", color=ft.Colors.ERROR))
             page.update()
             return
         except AnytypeError as ex:
-            tasks_list.controls.append(ft.Text(f"Erro: {ex}", color=ft.Colors.RED_400))
+            tasks_list.controls.append(ft.Text(f"Erro: {ex}", color=ft.Colors.ERROR))
             page.update()
             return
 
         try:
             tasks = task_manager.list_tasks()
         except AnytypeError as ex:
-            tasks_list.controls.append(ft.Text(f"Erro ao listar tarefas: {ex}", color=ft.Colors.RED_400))
+            tasks_list.controls.append(ft.Text(f"Erro ao listar tarefas: {ex}", color=ft.Colors.ERROR))
             page.update()
             return
 
@@ -882,7 +938,7 @@ def main(page: ft.Page) -> None:
         refresh_tasks_list()
         return ft.Column(
             [
-                ft.Text("Tarefas (Anytype)", size=22, weight=ft.FontWeight.BOLD),
+                ft.Text("Tarefas (Anytype)", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                 # Sem wrap=True aqui: o campo de nome usa expand=True, e o
                 # Flutter não aceita filho "expandido" numa linha que quebra
                 # (a aba inteira vira um quadro cinza de erro).
@@ -955,7 +1011,7 @@ def main(page: ft.Page) -> None:
     )
     space_dropdown = ft.Dropdown(label="Espaço do Anytype", width=320, options=[])
     pairing_status_text = ft.Text(
-        "Pareado" if config.anytype.api_key else "Não pareado", color=ft.Colors.GREEN_700 if config.anytype.api_key else ft.Colors.RED_400
+        "Pareado" if config.anytype.api_key else "Não pareado", color=ft.Colors.GREEN_600 if config.anytype.api_key else ft.Colors.ERROR
     )
 
     def load_spaces(e):
@@ -999,7 +1055,7 @@ def main(page: ft.Page) -> None:
                 config.anytype.api_key = api_key
                 persist()
                 pairing_status_text.value = "Pareado"
-                pairing_status_text.color = ft.Colors.GREEN_700
+                pairing_status_text.color = ft.Colors.GREEN_600
                 snack("Pareado com sucesso!")
             except AnytypeError as ex:
                 snack(str(ex), error=True)
@@ -1047,10 +1103,57 @@ def main(page: ft.Page) -> None:
         except AnytypeError as ex:
             snack(str(ex), error=True)
 
+    # ---- Aparência: paleta e modo claro/escuro, aplicados na hora
+    def theme_option(key: str) -> ft.DropdownOption:
+        label, seed = THEMES[key]
+        return ft.DropdownOption(
+            key=key,
+            text=label,
+            content=ft.Row(
+                [ft.Container(width=16, height=16, border_radius=8, bgcolor=seed), ft.Text(label)],
+                spacing=10,
+            ),
+        )
+
+    theme_dropdown = ft.Dropdown(
+        label="Paleta de cores",
+        width=220,
+        leading_icon=ft.Icons.PALETTE,
+        options=[theme_option(k) for k in THEMES],
+        value=config.gui.theme if config.gui.theme in THEMES else "tomate",
+    )
+    theme_mode_selector = ft.SegmentedButton(
+        segments=[
+            ft.Segment(value=k, label=label, icon=icon) for k, (label, _, icon) in THEME_MODES.items()
+        ],
+        selected=[config.gui.theme_mode if config.gui.theme_mode in THEME_MODES else "system"],
+        allow_empty_selection=False,
+        allow_multiple_selection=False,
+    )
+
+    def on_theme_change(e=None):
+        config.gui.theme = theme_dropdown.value or "tomate"
+        selected = theme_mode_selector.selected or ["system"]
+        config.gui.theme_mode = selected[0]
+        apply_theme()
+        persist()
+        page.update()
+
+    theme_dropdown.on_select = on_theme_change
+    theme_mode_selector.on_change = on_theme_change
+
     def build_settings_view() -> ft.Control:
         return ft.Column(
             [
-                ft.Text("Configurações do Pomodoro", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Aparência", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
+                ft.Row(
+                    [theme_dropdown, theme_mode_selector],
+                    spacing=16,
+                    wrap=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Divider(),
+                ft.Text("Configurações do Pomodoro", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                 ft.Row([work_field, short_field, long_field, cycles_field]),
                 sound_checkbox,
                 ft.Row(
@@ -1065,7 +1168,7 @@ def main(page: ft.Page) -> None:
                 ),
                 ft.Button("Salvar tempos", icon=ft.Icons.SAVE, on_click=save_pomodoro_config),
                 ft.Divider(),
-                ft.Text("Conexão com o Anytype", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Conexão com o Anytype", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.PRIMARY),
                 ft.Row([pairing_status_text, ft.Button("Parear com o Anytype", icon=ft.Icons.LINK, on_click=do_pairing)]),
                 ft.Row([space_dropdown, ft.Button("Carregar espaços", icon=ft.Icons.REFRESH, on_click=load_spaces)]),
                 ft.Row([base_url_field, api_version_field]),
@@ -1104,7 +1207,7 @@ def main(page: ft.Page) -> None:
     # visível por cima das outras janelas, que pode ser arrastado para
     # qualquer lugar da tela (clique e arraste em qualquer ponto, exceto no
     # botão de restaurar).
-    title_control = ft.Text("Pomodoro + Anytype", size=28, weight=ft.FontWeight.BOLD)
+    title_control = ft.Text("Pomodoro + Anytype", size=28, weight=ft.FontWeight.W_800, color=ft.Colors.PRIMARY)
     divider = ft.Divider()
 
     def build_mini_view() -> ft.Control:

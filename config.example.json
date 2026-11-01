@@ -38,6 +38,8 @@
     "mini_height": null,
     "tasks_sort": "created_desc",
     "tasks_status_filter": "",
-    "tasks_limit": 25
+    "tasks_limit": 25,
+    "theme": "tomate",
+    "theme_mode": "system"
   }
 }

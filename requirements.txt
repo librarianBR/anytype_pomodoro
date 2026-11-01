@@ -1,3 +1,3 @@
-requests>=2.31
+requests>=2.34.2
 plyer>=2.1   # opcional: notificações nativas do sistema operacional
-flet>=0.86   # interface gráfica (gui.py) — opcional, main.py roda sem ele
+flet>=1.0.0  # interface gráfica (gui.py) — opcional, main.py roda sem ele
