@@ -1,4 +1,4 @@
-# Pomodoro + Anytype
+# Anytype + Pomodoro
 
 Um timer **Pomodoro** com a sua lista de tarefas guardada no **Anytype**.
 Você escolhe a tarefa, foca nos ciclos de trabalho e pausa, e o andamento

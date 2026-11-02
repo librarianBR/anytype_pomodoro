@@ -335,7 +335,7 @@ class App:
 
     # --------------------------------------------------------------- menu
     def main_menu(self):
-        print("\n===== Pomodoro + Anytype =====")
+        print("\n===== Anytype + Pomodoro =====")
         run_menu("Menu principal", [
             ("Iniciar sessão Pomodoro", self.run_pomodoro),
             ("Configurar tempos do Pomodoro", self.menu_configure_pomodoro),

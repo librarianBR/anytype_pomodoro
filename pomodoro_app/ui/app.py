@@ -11,7 +11,7 @@ from .settings_view import SettingsView
 from .tasks_view import TasksView
 from .theme import apply_theme, muted
 
-APP_TITLE = "Pomodoro + Anytype"
+APP_TITLE = "Anytype + Pomodoro"
 PAGE_PADDING = 24
 
 

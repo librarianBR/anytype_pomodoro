@@ -1,4 +1,4 @@
-"""Pomodoro + Anytype: timer Pomodoro com tarefas guardadas no Anytype.
+"""Anytype + Pomodoro: timer Pomodoro com tarefas guardadas no Anytype.
 
 Organização:
 - config, paths ............ configuração (config.json) e caminhos
