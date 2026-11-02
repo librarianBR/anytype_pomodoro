@@ -101,3 +101,34 @@ def test_challenge_sends_app_name(monkeypatch):
     monkeypatch.setattr(client, "_request", fake_request)
     assert client.create_challenge() == "ch"
     assert sent == {"app_name": APP_NAME}
+
+
+def test_401_marks_key_rejected_without_deleting_it(monkeypatch):
+    client = _client_returning(monkeypatch, 401)
+    changes = []
+    client.on_key_status_change = changes.append
+    with pytest.raises(AnytypeAuthError):
+        client.list_spaces()
+    assert client.key_rejected and client.api_key == "chave"
+    assert changes == [True]
+
+
+def test_next_successful_call_clears_rejection(monkeypatch):
+    """Um 401 passageiro não deixa o pareamento marcado como inválido."""
+    client = _client_returning(monkeypatch, 401)
+    with pytest.raises(AnytypeAuthError):
+        client.list_spaces()
+    changes = []
+    client.on_key_status_change = changes.append
+    monkeypatch.setattr(client.session, "request", lambda *a, **k: _FakeResponse(200, {"data": []}))
+    assert client.list_spaces() == []
+    assert not client.key_rejected and changes == [False]
+
+
+def test_new_pairing_clears_rejection(monkeypatch):
+    client = _client_returning(monkeypatch, 401)
+    with pytest.raises(AnytypeAuthError):
+        client.list_spaces()
+    monkeypatch.setattr(client.session, "request", lambda *a, **k: _FakeResponse(200, {"api_key": "nova"}))
+    assert client.solve_challenge("ch", "1234") == "nova"
+    assert not client.key_rejected

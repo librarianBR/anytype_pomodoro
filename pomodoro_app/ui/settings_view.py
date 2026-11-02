@@ -48,7 +48,9 @@ class SettingsView:
 
         # ---- anytype
         self.pairing_text = ft.Text()
+        self.pair_btn = ft.Button("Parear com o Anytype", icon=ft.Icons.LINK, on_click=self._pair)
         self._show_pairing()
+        self.ctx.client.on_key_status_change = lambda rejected: self.ctx.run_on_ui(self._refresh_pairing)
         self.space_dropdown = ft.Dropdown(label="Espaço do Anytype", width=320, options=[], on_select=self._select_space)
         self.base_url_field = _text_field("URL base da API", a.base_url, 320)
         self.api_version_field = _text_field("Versão da API", a.api_version, 200)
@@ -87,7 +89,7 @@ class SettingsView:
                 ft.Button("Salvar tempos", icon=ft.Icons.SAVE, on_click=self._save_pomodoro),
                 ft.Divider(),
                 heading("Conexão com o Anytype"),
-                ft.Row([self.pairing_text, ft.Button("Parear com o Anytype", icon=ft.Icons.LINK, on_click=self._pair)]),
+                ft.Row([self.pairing_text, self.pair_btn]),
                 ft.Row([self.space_dropdown, ft.Button("Carregar espaços", icon=ft.Icons.REFRESH, on_click=self._load_spaces)]),
                 ft.Row([self.base_url_field, self.api_version_field]),
                 ft.Row([self.task_type_field, self.status_prop_field]),
@@ -143,9 +145,24 @@ class SettingsView:
 
     # ------------------------------------------------------------ anytype
     def _show_pairing(self) -> None:
+        """Três estados: pareado, não pareado e pareamento inválido (o
+        Anytype recusou a chave salva) — nos dois últimos o botão de parear
+        fica em destaque."""
         paired = bool(self.ctx.config.anytype.api_key)
-        self.pairing_text.value = "Pareado" if paired else "Não pareado"
-        self.pairing_text.color = ft.Colors.GREEN_600 if paired else ft.Colors.ERROR
+        if paired and self.ctx.client.key_rejected:
+            text, ok = "Pareamento inválido: pareie de novo", False
+        elif paired:
+            text, ok = "Pareado", True
+        else:
+            text, ok = "Não pareado", False
+        self.pairing_text.value = text
+        self.pairing_text.color = ft.Colors.GREEN_600 if ok else ft.Colors.ERROR
+        self.pair_btn.bgcolor = None if ok else ft.Colors.PRIMARY
+        self.pair_btn.color = None if ok else ft.Colors.ON_PRIMARY
+
+    def _refresh_pairing(self) -> None:
+        self._show_pairing()
+        self.ctx.update()
 
     def _pair(self, e) -> None:
         client = self.ctx.client

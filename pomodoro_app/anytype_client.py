@@ -20,7 +20,7 @@ Fluxo de autenticação (uma única vez, pelo pareamento na interface):
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
@@ -95,6 +95,14 @@ class AnytypeClient:
     def __init__(self, base_url: str, api_version: str, api_key: str = ""):
         self.session = requests.Session()
         self.api_key = api_key
+        # True depois que o Anytype recusou a chave (401). A chave NÃO é
+        # apagada: um 401 passageiro (ex.: Anytype ainda iniciando) não deve
+        # desfazer o pareamento. A próxima chamada que der certo volta a
+        # marcar como válida; um novo pareamento substitui a chave.
+        self.key_rejected = False
+        # chamado com o novo valor de key_rejected quando ele muda (pode vir
+        # da thread do timer)
+        self.on_key_status_change: Optional[Callable[[bool], None]] = None
         self.configure(base_url, api_version)
 
     def configure(self, base_url: str, api_version: str) -> None:
@@ -103,6 +111,12 @@ class AnytypeClient:
         self.api_version = api_version
 
     # --------------------------------------------------------- utilidades
+    def _set_key_rejected(self, rejected: bool) -> None:
+        if rejected != self.key_rejected:
+            self.key_rejected = rejected
+            if self.on_key_status_change:
+                self.on_key_status_change(rejected)
+
     def _headers(self, auth: bool = True) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
@@ -135,10 +149,13 @@ class AnytypeClient:
             # Nas chamadas de pareamento (auth=False) um 401/403 significa
             # outra coisa (ex.: código errado), então segue a mensagem crua.
             if auth and resp.status_code == 401:
+                self._set_key_rejected(True)
                 raise AnytypeAuthError(AUTH_ERROR_MESSAGE)
             if auth and resp.status_code == 403:
                 raise AnytypeForbiddenError(FORBIDDEN_ERROR_MESSAGE)
             raise AnytypeError(f"Anytype API retornou {resp.status_code}: {detail}")
+        if auth:
+            self._set_key_rejected(False)
         if resp.status_code == 204 or not resp.content:
             return None
         return resp.json()
@@ -158,6 +175,7 @@ class AnytypeClient:
             json={"challenge_id": challenge_id, "code": code},
         )
         self.api_key = data["api_key"]
+        self._set_key_rejected(False)
         return self.api_key
 
     # ------------------------------------------------------------ espaços
