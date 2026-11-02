@@ -12,6 +12,12 @@ uv run main.py     # linha de comando
 uv run pytest      # testes automatizados
 ```
 
+Para quem só quer abrir a aplicação há atalhos na raiz: `./executar.sh`
+(Linux/macOS) e `executar.bat` (Windows), com o argumento `cli` para a
+linha de comando. Eles tentam, nesta ordem, o `uv`, o `.venv` do projeto e
+o Python do sistema. O `.gitattributes` fixa as quebras de linha (CRLF no
+`.bat`, LF no `.sh`); sem isso o Git pode convertê-las e quebrar o script.
+
 O `config.json` é criado na primeira execução a partir de
 `config.example.json`. Ele guarda a chave da API do Anytype e por isso está
 no `.gitignore`: nunca faça commit dele. Para mudar os valores padrão de
@@ -21,8 +27,10 @@ quem usa o projeto pela primeira vez, edite `config.example.json`.
 
 ```
 gui.py, main.py          pontos de entrada (só chamam o pacote)
+executar.sh, executar.bat  atalhos para abrir a aplicação (Linux / Windows)
 generate_sounds.py       gera os sons em assets/*.wav
 pomodoro_app/
+  __init__.py            APP_NAME (nome no pareamento e nas notificações)
   config.py              configuração (config.json) e seus ajustes
   paths.py               onde ficam config.json e assets (script ou executável)
   anytype_client.py      cliente HTTP da API local do Anytype
@@ -85,7 +93,7 @@ notificação é disparado.
 | `test_session.py` | vincular/trocar/desvincular, concluir, fim do ciclo de foco (pausa, pergunta, retomada mesmo com erro), sons |
 | `test_task_filters.py` | busca sem acentos, filtros de status, ordenações e limite |
 | `test_config.py` | salvar/carregar, chaves desconhecidas, migração de nomes antigos, troca de espaço e de status |
-| `test_anytype_client.py` | formatos de resposta, paginação, configuração |
+| `test_anytype_client.py` | formatos de resposta, paginação, configuração, nome no pareamento, erros 401/403 e o estado "pareamento inválido" |
 | `test_formatting.py`, `test_user_story.py` | tempo, datas e história de usuário |
 | `test_timer_and_sounds.py` | sequência real de fases (com fases de 1–2 s) e sons |
 
@@ -101,6 +109,36 @@ configurável em `anytype.api_version`), conforme
 <https://developers.anytype.io/docs/reference>. A API é nova e muda com
 frequência; quando uma chamada falha, o erro já traz o corpo da resposta,
 o que normalmente mostra o campo que mudou.
+
+### Pareamento (Anytype 0.57+)
+
+O fluxo está descrito no topo de `anytype_client.py`. A partir do Anytype
+Desktop 0.57, antes de mostrar o código de 4 dígitos o Anytype abre uma
+janela de aprovação com o `app_name` enviado em `create_challenge` (por
+isso ele é `APP_NAME`, "Anytype + Pomodoro"), e a autorização passa a
+valer só para os espaços que o usuário liberar. Consequências no código:
+
+- `GET /v1/spaces` lista só os espaços liberados. Lista vazia vira o aviso
+  `NO_SPACES_MESSAGE` (GUI e CLI). O texto do diálogo de pareamento é
+  `PAIRING_HINT`, também compartilhado pelas duas interfaces.
+- Em chamadas autenticadas, **401** vira `AnytypeAuthError` (chave
+  revogada: pareie de novo) e **403** vira `AnytypeForbiddenError` (espaço
+  não liberado), ambas subclasses de `AnytypeError` com mensagens prontas.
+  Nas chamadas do próprio pareamento (`auth=False`) um 401 é código
+  errado, então a mensagem crua é mantida.
+- **Num 401 a chave não é apagada.** O cliente marca `key_rejected = True`
+  e avisa por `on_key_status_change` (pode vir da thread do timer; a tela
+  Configurações repassa por `run_on_ui`). A tela mostra "Pareamento
+  inválido" e destaca o botão de parear. A próxima chamada autenticada que
+  der certo, ou um novo pareamento, volta `key_rejected` para `False`.
+  Motivo: a chave recusada já não dá acesso a nada (apagá-la não traz
+  segurança), e um 401 passageiro, por exemplo com o Anytype ainda
+  iniciando, desfaria o pareamento à toa.
+
+Esses comportamentos seguem as notas da versão 0.57.0 do `anytype-ts` e
+ainda não foram conferidos contra um Anytype 0.57 real.
+
+### Particularidades da versão `2025-11-08`
 
 Particularidades já encontradas nessa versão:
 
@@ -139,6 +177,10 @@ string ou objeto `{"id", "name"}`. Se o status aparecer como `?`, o botão
   que chegam depois de "Parar" são descartados (`session.is_running`).
 - Para falar com o Anytype a partir de uma tela, use `ctx.attempt(ação,
   "mensagem de sucesso")`: mostra o aviso de sucesso ou o erro, sem travar.
+- A tela Pomodoro mostra a história de usuário (a `description` da tarefa)
+  da tarefa vinculada num cartão, durante todas as fases. Ela vem das
+  tarefas carregadas no dropdown (`_tasks_by_id`), relidas a cada vez que a
+  aba é aberta, por isso uma edição feita no Anytype aparece ao voltar à aba.
 - **Cuidado com layout**: um filho com `expand=True` dentro de uma `Row`
   com `wrap=True`, ou dentro de uma `Column` com `scroll`, é erro no
   Flutter, e a área inteira vira um quadro cinza (sem erro no terminal).
