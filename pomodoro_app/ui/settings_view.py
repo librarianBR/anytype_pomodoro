@@ -6,7 +6,7 @@ from typing import Callable
 
 import flet as ft
 
-from ..anytype_client import AnytypeError
+from ..anytype_client import NO_SPACES_MESSAGE, PAIRING_HINT, AnytypeError
 from ..pomodoro_timer import Phase
 from ..sounds import COUNTDOWN_SECONDS, play_countdown_demo, play_sound, sound_path_for_phase
 from .context import AppContext, field_text
@@ -166,7 +166,7 @@ class SettingsView:
 
         self.ctx.confirm(
             "Parear com o Anytype",
-            ft.Column([ft.Text("Abra o Anytype Desktop: um código de 4 dígitos deve aparecer na tela."), code_field], tight=True),
+            ft.Column([ft.Text(PAIRING_HINT), code_field], tight=True),
             confirm,
         )
 
@@ -178,6 +178,8 @@ class SettingsView:
             return
         self.space_dropdown.options = [ft.DropdownOption(key=s["id"], text=s.get("name", s["id"])) for s in spaces]
         self.space_dropdown.value = self.ctx.config.anytype.space_id or None
+        if not spaces:
+            self.ctx.snack(NO_SPACES_MESSAGE, error=True)
         self.ctx.update()
 
     def _select_space(self, e) -> None:

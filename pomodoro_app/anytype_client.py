@@ -10,7 +10,9 @@ Este cliente usa a versão "2025-11-08".
 
 Fluxo de autenticação (uma única vez, pelo pareamento na interface):
   1. POST /v1/auth/challenges {"app_name": "..."} -> {"challenge_id": ...}
-     O Anytype Desktop mostra um código de 4 dígitos na tela.
+     A partir do Anytype 0.57, o Desktop primeiro pede que o usuário aprove
+     o acesso (mostrando o app_name) e escolha os espaços liberados; só
+     depois exibe um código de 4 dígitos na tela.
   2. Você digita esse código quando o script pedir.
   3. POST /v1/auth/api_keys {"challenge_id":..., "code":...} -> {"api_key": ...}
   A api_key vira um Bearer token para todas as chamadas seguintes e é salva
@@ -22,9 +24,38 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from . import APP_NAME
+
 
 class AnytypeError(RuntimeError):
     """Erro de comunicação com a API do Anytype."""
+
+
+class AnytypeAuthError(AnytypeError):
+    """401: a chave salva não vale mais (revogada ou de outra instalação)."""
+
+
+class AnytypeForbiddenError(AnytypeError):
+    """403: a chave vale, mas não dá acesso ao que foi pedido — no Anytype
+    0.57+, normalmente um espaço que não foi liberado no pareamento."""
+
+
+AUTH_ERROR_MESSAGE = (
+    "O Anytype não reconhece mais esta aplicação (a chave pode ter sido "
+    "revogada). Pareie de novo em Configurações → \"Parear com o Anytype\"."
+)
+PAIRING_HINT = (
+    f"No Anytype Desktop, aprove o pedido de acesso do {APP_NAME} e escolha "
+    "os espaços liberados. Depois, digite aqui o código de 4 dígitos que aparecer."
+)
+NO_SPACES_MESSAGE = (
+    f"Nenhum espaço liberado para o {APP_NAME}. Libere um espaço no Anytype "
+    "(ou pareie de novo, escolhendo o espaço das tarefas)."
+)
+FORBIDDEN_ERROR_MESSAGE = (
+    f"O Anytype não liberou este espaço para o {APP_NAME}. Aprove o acesso "
+    "a ele no Anytype ou pareie de novo, liberando o espaço."
+)
 
 
 # Cores aceitas pela API do Anytype para tags (campo obrigatório em
@@ -101,13 +132,19 @@ class AnytypeClient:
                 detail = resp.json()
             except ValueError:
                 detail = resp.text
+            # Nas chamadas de pareamento (auth=False) um 401/403 significa
+            # outra coisa (ex.: código errado), então segue a mensagem crua.
+            if auth and resp.status_code == 401:
+                raise AnytypeAuthError(AUTH_ERROR_MESSAGE)
+            if auth and resp.status_code == 403:
+                raise AnytypeForbiddenError(FORBIDDEN_ERROR_MESSAGE)
             raise AnytypeError(f"Anytype API retornou {resp.status_code}: {detail}")
         if resp.status_code == 204 or not resp.content:
             return None
         return resp.json()
 
     # -------------------------------------------------------- autenticação
-    def create_challenge(self, app_name: str = "python-pomodoro") -> str:
+    def create_challenge(self, app_name: str = APP_NAME) -> str:
         data = self._request(
             "POST", "/v1/auth/challenges", auth=False, json={"app_name": app_name}
         )

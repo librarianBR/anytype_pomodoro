@@ -12,7 +12,7 @@ import json
 import sys
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
-from .anytype_client import AnytypeClient, AnytypeError
+from .anytype_client import NO_SPACES_MESSAGE, PAIRING_HINT, AnytypeClient, AnytypeError
 from .config import AppConfig, load_config, save_config
 from .formatting import format_date, parse_date
 from .session import PomodoroSession
@@ -85,7 +85,7 @@ class App:
         print("\n== Pareamento com o Anytype ==\nAbra o Anytype Desktop antes de continuar.")
         try:
             challenge_id = self.client.create_challenge()
-            print("Um código de 4 dígitos deve aparecer no Anytype Desktop agora.")
+            print(PAIRING_HINT)
             api_key = self.client.solve_challenge(challenge_id, input_nonempty("Digite o código de 4 dígitos: "))
         except AnytypeError as e:
             print(f"Erro: {e}")
@@ -101,7 +101,7 @@ class App:
             print(f"Erro: {e}")
             return
         if not spaces:
-            print("Nenhum espaço encontrado.")
+            print(NO_SPACES_MESSAGE)
             return
         space = choose_from_list(spaces, lambda s: s.get("name", s.get("id")))
         self.task_manager.select_space(space["id"])

@@ -1,6 +1,10 @@
 import pytest
 
-from pomodoro_app.anytype_client import AnytypeClient, AnytypeError, _find_by_name, _unwrap_list, _unwrap_object
+from pomodoro_app import APP_NAME
+from pomodoro_app.anytype_client import (
+    AnytypeAuthError, AnytypeClient, AnytypeError, AnytypeForbiddenError,
+    _find_by_name, _unwrap_list, _unwrap_object,
+)
 
 
 def test_unwrap_object_accepts_both_formats():
@@ -47,3 +51,53 @@ def test_configure_strips_trailing_slash():
 def test_requests_without_pairing_explain_what_to_do():
     with pytest.raises(AnytypeError, match="pareada"):
         AnytypeClient("http://localhost:31009", "v1")._headers()
+
+
+class _FakeResponse:
+    def __init__(self, status_code, body=None):
+        self.status_code = status_code
+        self._body = body or {}
+        self.content = b"x"
+        self.text = str(self._body)
+
+    def json(self):
+        return self._body
+
+
+def _client_returning(monkeypatch, status_code, body=None):
+    client = AnytypeClient("http://localhost:31009", "v1", "chave")
+    monkeypatch.setattr(client.session, "request", lambda *a, **k: _FakeResponse(status_code, body))
+    return client
+
+
+def test_401_asks_to_pair_again(monkeypatch):
+    client = _client_returning(monkeypatch, 401)
+    with pytest.raises(AnytypeAuthError, match="Pareie de novo"):
+        client.list_spaces()
+
+
+def test_403_explains_space_not_granted(monkeypatch):
+    client = _client_returning(monkeypatch, 403)
+    with pytest.raises(AnytypeForbiddenError, match="não liberou este espaço"):
+        client.list_types("space")
+
+
+def test_pairing_errors_keep_raw_message(monkeypatch):
+    """No pareamento, 401 é código errado, não chave revogada."""
+    client = _client_returning(monkeypatch, 401, {"message": "invalid code"})
+    with pytest.raises(AnytypeError, match="401") as info:
+        client.solve_challenge("ch", "0000")
+    assert not isinstance(info.value, AnytypeAuthError)
+
+
+def test_challenge_sends_app_name(monkeypatch):
+    client = AnytypeClient("http://localhost:31009", "v1")
+    sent = {}
+
+    def fake_request(method, path, **kwargs):
+        sent.update(kwargs["json"])
+        return {"challenge_id": "ch"}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    assert client.create_challenge() == "ch"
+    assert sent == {"app_name": APP_NAME}

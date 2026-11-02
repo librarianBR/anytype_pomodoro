@@ -12,3 +12,6 @@ Organização:
 - cli ...................... interface de linha de comando
 - ui/ ...................... interface gráfica (Flet), uma tela por módulo
 """
+
+# Nome mostrado pelo Anytype na janela de aprovação do pareamento.
+APP_NAME = "Anytype + Pomodoro"

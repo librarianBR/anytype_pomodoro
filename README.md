@@ -87,10 +87,13 @@ Anytype: não é preciso criar nada para elas.
    `executar.bat` no Windows (dá para clicar duas vezes). Eles usam o uv se
    estiver instalado, senão o `.venv` do projeto, senão o Python do sistema.
    Acrescente `cli` (`./executar.sh cli`) para abrir a versão de terminal.
-3. Vá em **Configurações** e clique em **"Parear com o Anytype"**. O
-   Anytype mostra um código de 4 dígitos; digite-o na aplicação. Isso só é
-   feito uma vez: a chave fica salva no seu computador.
-4. Clique em **"Carregar espaços"** e escolha o espaço das tarefas.
+3. Vá em **Configurações** e clique em **"Parear com o Anytype"**. No
+   Anytype 0.57 ou mais recente, aparece primeiro um pedido de acesso do
+   **Anytype + Pomodoro**: aprove-o e libere o espaço das tarefas. Em
+   seguida o Anytype mostra um código de 4 dígitos; digite-o na aplicação.
+   Isso só é feito uma vez: a chave fica salva no seu computador.
+4. Clique em **"Carregar espaços"** e escolha o espaço das tarefas (só
+   aparecem os espaços que você liberou no pareamento).
 5. Clique em **"Testar / preparar"**. A aplicação confere o tipo e as
    propriedades e avisa exatamente o que estiver faltando.
 6. Ajuste os tempos do Pomodoro, se quiser, e clique em **"Salvar tempos"**.
@@ -224,6 +227,8 @@ funções por menus. Durante a sessão, digite: `status`, `pausar`, `retomar`,
 | Problema | O que fazer |
 |---|---|
 | Erro de conexão com o Anytype | Confira se o Anytype Desktop está aberto. Se acabou de atualizá-lo, faça o pareamento de novo em Configurações. |
+| "O Anytype não reconhece mais esta aplicação" | A chave foi revogada ou perdeu a validade. Faça o pareamento de novo em Configurações. |
+| "O Anytype não liberou este espaço" ou nenhum espaço na lista | O espaço não foi liberado no pareamento. Libere-o no Anytype ou pareie de novo, escolhendo o espaço das tarefas. |
 | "Configuração incompleta" na aba Tarefas | Clique em "Testar / preparar" em Configurações: a mensagem diz o que falta no Anytype (tipo, propriedade `Status` etc.). |
 | Status aparece como `?` | Confira o nome da propriedade e das opções de status em Configurações. Se persistir, use "Ver JSON bruto" na tarefa e abra uma *issue* com o conteúdo. |
 | Observações não funcionam | Crie a propriedade de texto `Notes` e adicione-a ao tipo de tarefa no Anytype. |
