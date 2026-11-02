@@ -83,6 +83,10 @@ Anytype: não é preciso criar nada para elas.
    ```bash
    uv run gui.py      # ou, com pip: python gui.py
    ```
+   Ou use os atalhos prontos: `./executar.sh` no Linux/macOS e
+   `executar.bat` no Windows (dá para clicar duas vezes). Eles usam o uv se
+   estiver instalado, senão o `.venv` do projeto, senão o Python do sistema.
+   Acrescente `cli` (`./executar.sh cli`) para abrir a versão de terminal.
 3. Vá em **Configurações** e clique em **"Parear com o Anytype"**. O
    Anytype mostra um código de 4 dígitos; digite-o na aplicação. Isso só é
    feito uma vez: a chave fica salva no seu computador.
