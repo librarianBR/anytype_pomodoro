@@ -39,6 +39,21 @@ class PomodoroView:
         )
         self.unlink_btn = ft.Button("Desvincular", icon=ft.Icons.LINK_OFF, on_click=lambda e: self.link(None))
         self.complete_btn = ft.Button("Concluir tarefa", icon=ft.Icons.TASK_ALT, on_click=self._ask_complete)
+        self._tasks_by_id: dict = {}  # tarefas do dropdown, para achar a história
+
+        # história de usuário da tarefa vinculada (só aparece se existir)
+        self.story_text = ft.Text("", size=14, selectable=True)
+        self.story_card = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Row([ft.Icon(ft.Icons.AUTO_STORIES, size=16), muted("História de usuário", size=12)], spacing=6),
+                    self.story_text,
+                ],
+                spacing=6, tight=True,
+            ),
+            width=560, padding=14, border_radius=10,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, visible=False,
+        )
 
         # controles do timer
         self.start_btn = ft.Button("Iniciar", icon=ft.Icons.PLAY_ARROW, on_click=self._start)
@@ -55,6 +70,7 @@ class PomodoroView:
     # ------------------------------------------------------------ desenho
     def build(self) -> ft.Control:
         self.refresh_task_dropdown()
+        self._update_link_buttons()  # história relida: pode ter sido editada no Anytype
         return ft.Column(
             [
                 heading("Sessão Pomodoro", 22),
@@ -69,6 +85,7 @@ class PomodoroView:
                     alignment=ft.MainAxisAlignment.CENTER, wrap=True,
                 ),
                 self.linked_task_text,
+                self.story_card,
                 ft.Container(height=10),
                 ft.Row(
                     [self.start_btn, self.pause_btn, self.resume_btn, self.restart_btn, self.skip_btn, self.stop_btn],
@@ -158,6 +175,7 @@ class PomodoroView:
         """Lista as tarefas não concluídas, mantendo a vinculada selecionada."""
         self.task_dropdown.options = []
         self.task_dropdown.value = None
+        self._tasks_by_id = {}
         if not self.ctx.config.anytype.space_id:
             return
         try:
@@ -165,6 +183,7 @@ class PomodoroView:
             tasks = self.ctx.task_manager.list_pending_tasks()
         except ANYTYPE_ERRORS:
             return  # ainda não configurado: o dropdown só fica vazio
+        self._tasks_by_id = {t.id: t for t in tasks}
         self.task_dropdown.options = [ft.DropdownOption(key=t.id, text=f"[{t.status}] {t.name}") for t in tasks]
         linked = self.session.linked_task_id
         if any(o.key == linked for o in self.task_dropdown.options):
@@ -184,6 +203,10 @@ class PomodoroView:
         self.unlink_btn.disabled = self.complete_btn.disabled = not has_task
         self.task_dropdown.value = self.session.linked_task_id
         self.linked_task_text.value = f"Vinculada a: {self._linked_task_name()}" if has_task else ""
+        task = self._tasks_by_id.get(self.session.linked_task_id) if has_task else None
+        story = task.description.strip() if task else ""
+        self.story_text.value = story
+        self.story_card.visible = bool(story)
 
     def link(self, task_id: Optional[str]) -> None:
         self.ctx.show_warnings(self.session.link(task_id))
