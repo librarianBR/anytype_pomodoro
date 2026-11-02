@@ -9,12 +9,13 @@ import platform
 import shutil
 import subprocess
 
+from . import APP_NAME
+
 try:
     from plyer import notification as _plyer_notification
 except Exception:  # biblioteca opcional
     _plyer_notification = None
 
-APP_NAME = "Anytype Pomodoro"
 NOTIFICATION_TIMEOUT_SECONDS = 5
 
 
